@@ -1,0 +1,79 @@
+---
+title: "For giggles"
+author: "Shane Hauck"
+date: "2023-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(gganimate)
+```
+
+
+```{r}
+games <- read_csv("data/games.csv")
+players <- read_csv("data/players.csv")
+plays <- read_csv("data/plays.csv")
+tackles <- read_csv("data/tackles.csv")
+tracking_week_1 <- read_csv("data/tracking_week_1.csv")
+```
+
+```{r}
+tracking_week_1 %>%
+  filter(!is.na(event)) %>%
+  group_by(event) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(x = event, y = count)) +
+  geom_col() +
+  coord_flip()
+```
+
+```{r}
+# Keeping tracking data for each run play
+runs_tw1 <- tracking_week_1 %>%
+  filter(event == "run") %>%
+  select(gameId, playId) %>%
+  left_join(tracking_week_1)
+```
+
+```{r}
+test_run <- runs_tw1 %>% filter(gameId == 2022091102, playId == 1726)
+
+test_run <- runs_tw1 %>% filter(gameId == 2022091113, playId == 1566)
+
+test_run <- runs_tw1 %>% filter(gameId == 2022091110, playId == 347)
+
+test_run <- runs_tw1 %>% filter(gameId == 2022091110, playId == 379)
+```
+
+  
+```{r}
+test_run %>%
+ggplot(aes(x = x, y = y, color = club)) +
+  geom_point(show.legend = FALSE) +
+ # geom_spoke(
+  #  aes(
+  #    angle = o
+  #  ),
+  #  radius = 2
+  #) +
+  transition_time(frameId) +
+  theme_bw()
+```
+
+
+```{r}
+test_run <- runs_tw1 %>% filter(gameId == 2022091110, playId == 379)
+test_run %>%
+ggplot() +
+  geom_point(aes(x = x, y = y, color = club), show.legend = FALSE) +
+  geom_hline(aes(yintercept = y), data = test_run %>% filter(nflId == 52471)) +
+  transition_time(frameId) +
+  theme_bw()
+```
+
