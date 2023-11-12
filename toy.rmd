@@ -1,0 +1,130 @@
+---
+title: "For giggles"
+author: "Shane Hauck"
+date: "2023-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(gganimate)
+theme_set(theme_bw())
+```
+
+
+```{r}
+games <- read_csv("data/games.csv")
+players <- read_csv("data/players.csv")
+plays <- read_csv("data/plays.csv")
+tackles <- read_csv("data/tackles.csv")
+tracking_week_1 <- read_csv("data/tracking_week_1.csv") %>%
+  mutate(
+    # make all plays go from left to right
+    x = ifelse(playDirection == "left", 120 - x, x),
+    y = ifelse(playDirection == "left", 160 / 3 - y, y),
+    # flip player direction and orientation
+    dir = ifelse(playDirection == "left", dir + 180, dir),
+    dir = ifelse(dir > 360, dir - 360, dir),
+    o = ifelse(playDirection == "left", o + 180, o),
+    o = ifelse(o > 360, o - 360, o)
+  )
+```
+
+```{r}
+tracking_week_1 <- left_join(tracking_week_1, plays) %>%
+  left_join(players)
+```
+
+
+```{r}
+library(sportyR)
+field_params <- list(
+  field_apron = "springgreen3",
+  field_border = "springgreen3",
+  offensive_endzone = "springgreen3",
+  defensive_endzone = "springgreen3",
+  offensive_half = "springgreen3",
+  defensive_half = "springgreen3"
+)
+
+nfl_field <- function(xlims) {
+  geom_football(
+    league = "nfl",
+    display_range = "in_bounds_only",
+    x_trans = 60,
+    y_trans = 26.6667,
+    xlims = xlims,
+    color_updates = field_params
+  )
+}
+```
+
+
+```{r}
+tracking_week_1 %>%
+  filter(!is.na(event)) %>%
+  group_by(event) %>%
+  summarise(count = n()) %>%
+  ggplot(aes(x = event, y = count)) +
+  geom_col() +
+  coord_flip()
+```
+
+```{r}
+# Keeping tracking data for each run play
+runs_tw1 <- tracking_week_1 %>%
+  filter(event %in% c("run", "lateral", "handoff")) %>%
+  select(gameId, playId) %>%
+  left_join(tracking_week_1)
+```
+
+
+
+
+
+```{r}
+test_run <- runs_tw1 %>% filter(gameId == 2022091110, playId == 347)
+nfl_field(c(25, 55)) +
+  geom_point(
+    data = test_run, aes(x = x, y = y, color = club),
+    show.legend = FALSE,
+    size = 3
+  ) +
+  geom_hline(aes(yintercept = y), data = test_run %>% filter(nflId == 52471)) +
+  transition_time(frameId) +
+  scale_color_manual(values = c("red", "yellow", "blue"))
+```
+
+```{r}
+handoffs <- filter(runs_tw1, event == "handoff") %>% distinct(gameId, playId)
+```
+
+```{r}
+test_run <- runs_tw1 %>% filter(gameId == 2022090800, playId == 101)
+nfl_field(c(35, 75)) +
+  geom_point(
+    data = test_run, aes(x = x, y = y, color = club),
+    show.legend = FALSE,
+    size = 3
+  ) +
+  geom_hline(aes(yintercept = y), data = test_run %>% filter(nflId == 43298)) +
+  transition_time(frameId) +
+  scale_color_manual(values = c("red", "yellow", "blue"))
+```
+
+```{r}
+test_run <- runs_tw1 %>% filter(gameId == 2022091102, playId == 574)
+nfl_field(c(65, 100)) +
+  geom_point(
+    data = test_run, aes(x = x, y = y, color = club),
+    show.legend = FALSE,
+    size = 3
+  ) +
+  # geom_hline(aes(yintercept = y), data = test_run %>% filter(nflId == 43298)) +
+  transition_time(frameId) +
+  scale_color_manual(values = c("red", "yellow", "blue"))
+```
