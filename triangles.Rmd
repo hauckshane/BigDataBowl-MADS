@@ -138,7 +138,7 @@ furthest_y <- wk2_track_data %>%
 ```
 
 ```{r}
-# Grab the x coordinate where we see furthest_y
+# Grab the x coordinate and frame id where we see furthest_y
 furthest <- furthest_y %>%
   group_by(gamePlayId) %>%
   filter(y == furthest_y) %>%
@@ -156,6 +156,63 @@ wk2_track_data <- merge(wk2_track_data, furthest, by = "gamePlayId")
 
 
 # Find angle of change
+The angle we want is the inside angle at the furthest point.
+If we have vertices F, S, and E (furthest, start, end) we want angle F, 
+which is made from line segments EF and FS.
+
+1. angle FSE = arctan((end_y - furthest_y)/ (end_x - furthest_y))
+2. angle F = 180 - angle FSE
+
+Radians to degree conversion: degree = radians * (180/pi)
+
+```{r}
+# Function to calculate the angle of change, angle F
+find.angle.f <- function(x_s, y_s, x_e, y_e, x_f, y_f) {
+  # Convert input values to numeric
+  x_s <- as.numeric(x_s)
+  y_s <- as.numeric(y_s)
+  x_e <- as.numeric(x_e)
+  y_e <- as.numeric(y_e)
+  x_f <- as.numeric(x_f)
+  y_f <- as.numeric(y_f)
+  
+  # Calculate the angle FSE in radians
+  fse_rad <- atan2(y_e - y_f, x_e - x_f)
+  
+  # Convert the angle from radians to degrees
+  fse_deg <- fse_rad * (180 / pi)
+  
+  # Calculate the angle at vertex F (angle EF and FS)
+  f_deg <- 180 - fse_deg
+  
+  return(f_deg)
+}
+```
+
+```{r}
+# Apply the function that calculates the angle to the data
+wk2_track_data$angle <- apply(wk2_track_data, 1, function(row) {
+  if (all(complete.cases(row[c("start_x", "start_y", 
+                               "end_x", "end_y", 
+                               "furthest_x", "furthest_y")]))) {
+    find.angle.f(row[["start_x"]], row[["start_y"]], 
+                 row[["end_x"]], row[["end_y"]], 
+                 row[["furthest_x"]], row[["furthest_y"]])
+  } else {
+    NA
+  }
+})
+
+```
+
+
+# Save the data
+Saving the data as wk2_triangles.csv
+
+```{r}
+# Save dataframe as CSV
+write.csv(wk2_track_data, file = "data/wk2_triangles.csv", row.names = FALSE)
+```
 
 
 
