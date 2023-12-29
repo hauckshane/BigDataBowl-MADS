@@ -92,34 +92,28 @@ designed_runs <- designed_runs %>%
   group_by(gameId, playId) %>%
   fill(ballY_preSnap, .direction = c("updown")) %>%
   mutate(ballCarrierY = ifelse(nflId == ballCarrierId, y, NA)) %>%
-  fill(ballCarrierY, .direction = c("updown")) 
+  fill(ballCarrierY, .direction = c("updown"))
 
 # plays where all offensive lineman and running backs take same same first step
 sameDir <- designed_runs %>%
-  filter(position %in% c("T", "G", "C") # ) %>%
-  | nflId == ballCarrierId) %>%
+  filter(position %in% c("T", "G", "C") | nflId == ballCarrierId) %>%
+  group_by(gameId, playId, nflId) %>%
+  mutate(ball_snap_y = ifelse(frameId == 5, y, NA)) %>%
+  fill(ball_snap_y, .direction = "updown") %>%
+  mutate(frame_7_y = ifelse(frameId == 7, y, NA)) %>%
+  fill(frame_7_y, .direction = "updown") %>%
+  mutate(y_change = frame_7_y - ball_snap_y) %>%
+  mutate(dir_atSnap = ifelse(y_change > 0, "left", "right")) %>%
   group_by(gameId, playId) %>%
-  mutate(ball_snap_frame = ifelse(event == "ball_snap", frameId, NA)) %>%
-  fill(ball_snap_frame, .direction = c("updown")) %>%
-  filter(frameId %in% c(ball_snap_frame)) %>%
-  mutate(dir_atSnap = ifelse(dir <= 180, "left", "right")) %>%
   mutate(same_dir = ifelse(all(dir_atSnap == first(dir_atSnap)), "yes", "no")) %>%
-  distinct(gameId, playId, same_dir) 
+  distinct(gameId, playId, same_dir)
 
 # plays where all offensive lineman and running backs take same same first step
-sameDir_yes <- sameDir %>% filter(same_dir == "yes") %>% distinct(gameId, playId)
+sameDir_yes <- sameDir %>%
+  filter(same_dir == "yes") %>%
+  distinct(gameId, playId)
 
-# tracking data where all offensive lineman and running backs take same same first step
-WK2_SameDirection_TrackData <- left_join(sameDir_yes, designed_runs)
 ```
-
-# MARION STOP HERE
-# USE WK2_SameDirection_TrackData AS TRACKING DATA TO START THE ANALYSIS
-
-
-
-
-
 
 
 ```{r}
@@ -131,21 +125,36 @@ DL_info <- designed_runs %>%
   fill(pre_ball_snap_frame, .direction = "updown") %>%
   filter(frameId == pre_ball_snap_frame) %>%
   # Assigning ball position
-  mutate(ball_x = ifelse(club == "football", x, NA),
-         ball_y = ifelse(club == "football", y, NA)) %>%
+  mutate(
+    ball_x = ifelse(club == "football", x, NA),
+    ball_y = ifelse(club == "football", y, NA)
+  ) %>%
   fill(ball_x, ball_y, .direction = "updown") %>%
   filter(club != "football") %>%
   # Calculating distances and determining if defenders are in the box and on the LOS
-  mutate(distance_to_ball = sqrt((x - ball_x)^2 + (y - ball_y)^2),
-         rank_distance_to_ball = rank(distance_to_ball),
-         isInBox = ifelse(rank_distance_to_ball <= defendersInTheBox, "yes", "no"),
-         distance_to_LOS = abs(x - ball_x),
-         isonLOS = ifelse(distance_to_LOS <= 2, "yes", "no")) %>%
-  select(gameId, playId, nflId, pre_ball_snap_frame, isInBox, isonLOS) 
+  mutate(
+    distance_to_ball = sqrt((x - ball_x)^2 + (y - ball_y)^2),
+    rank_distance_to_ball = rank(distance_to_ball),
+    isInBox = ifelse(rank_distance_to_ball <= defendersInTheBox, "yes", "no"),
+    distance_to_LOS = abs(x - ball_x),
+    isonLOS = ifelse(distance_to_LOS <= 2, "yes", "no")
+  ) %>%
+  select(gameId, playId, nflId, pre_ball_snap_frame, isInBox, isonLOS)
 
-processing <- right_join(DL_info, designed_runs) %>%
-  mutate(isInBox = ifelse(is.na(isInBox), "no", isInBox),
-         isonLOS = ifelse(is.na(isonLOS), "no", isonLOS)) %>%
+
+processing <- right_join(DL_info, designed_runs %>% group_by(gameId, playId, nflId) %>%
+  mutate(ball_snap_y = ifelse(frameId == 5, y, NA)) %>%
+  fill(ball_snap_y, .direction = "updown") %>%
+  mutate(frame_7_y = ifelse(frameId == 7, y, NA)) %>%
+  fill(frame_7_y, .direction = "updown") %>%
+  mutate(y_change = frame_7_y - ball_snap_y) %>%
+  mutate(dir_atSnap = ifelse(y_change > 0, "left", "right")) %>%
+  group_by(gameId, playId) %>%
+  mutate(same_dir = ifelse(all(dir_atSnap == first(dir_atSnap)), "yes", "no"))) %>%
+  mutate(
+    isInBox = ifelse(is.na(isInBox), "no", isInBox),
+    isonLOS = ifelse(is.na(isonLOS), "no", isonLOS)
+  ) %>%
   fill(pre_ball_snap_frame, .direction = c("updown")) %>%
   filter(frameId == pre_ball_snap_frame) %>%
   filter(club == possessionTeam |
@@ -155,27 +164,33 @@ processing <- right_join(DL_info, designed_runs) %>%
     nflId == ballCarrierId) %>%
   mutate(isOLM = ifelse(position %in% c("T", "G", "C"), 1, 0)) %>%
   group_by(gameId, playId) %>%
-  mutate(numOLM = sum(isOLM),
-         numOLM = ifelse(numOLM == 0, max(numOLM), numOLM)) %>%
+  mutate(
+    numOLM = sum(isOLM),
+    numOLM = ifelse(numOLM == 0, max(numOLM), numOLM)
+  ) %>%
   filter(numOLM > 0) %>%
   mutate(numonLOSInBox = sum(isonLOS == "yes" & isInBox == "yes")) %>%
   distinct(gameId, playId, nflId, isInBox, isonLOS, numOLM, numonLOSInBox) %>%
-  mutate(OLM_outnumbered = ifelse(numOLM <= numonLOSInBox, "yes", "no"),
-         OLM_upby = numOLM - numonLOSInBox) %>%
+  mutate(
+    OLM_outnumbered = ifelse(numOLM <= numonLOSInBox, "yes", "no"),
+    OLM_upby = numOLM - numonLOSInBox
+  ) %>%
   left_join(sameDir) %>%
   mutate(same_dir_exception = ifelse(same_dir == "no" & OLM_outnumbered == "no", "yes", "no")) %>%
   right_join(designed_runs) %>%
   filter(same_dir_exception == "yes") %>%
   filter(position %in% c("T", "G", "C") |
-           nflId == ballCarrierId) %>%
+    nflId == ballCarrierId) %>%
   mutate(ball_snap_frame = ifelse(event == "ball_snap", frameId, NA)) %>%
   fill(ball_snap_frame, .direction = c("updown")) %>%
   filter(frameId %in% c(ball_snap_frame)) %>%
-  mutate(dir_atSnap = ifelse(dir <= 180, "left", "right")) %>%
+  mutate(dir_atSnap = ifelse(dir >= 180, "left", "right")) %>%
   # Count the number of players who went right and who went left
   group_by(gameId, playId) %>%
-  mutate(numLeft = sum(dir_atSnap == "left"),
-         numRight = sum(dir_atSnap == "right")) %>%
+  mutate(
+    numLeft = sum(dir_atSnap == "left"),
+    numRight = sum(dir_atSnap == "right")
+  ) %>%
   # Find the direction that the minority of players went
   mutate(minorityDir = ifelse(numLeft < numRight, "left", "right")) %>%
   mutate(ballCarrier_majorityDir = ifelse(nflId == ballCarrierId & dir_atSnap == minorityDir, "no", "yes")) %>%
@@ -185,22 +200,26 @@ processing <- right_join(DL_info, designed_runs) %>%
   filter(ballCarrier_majorityDir == "yes") %>%
   filter(nflId != ballCarrierId) %>%
   # Count the number of players that went the minority direction
-  mutate(numMinorityDir = ifelse(minorityDir == "left", numLeft, numRight),
-         wentMinority = ifelse(dir_atSnap == minorityDir, "yes", "no")) %>%
+  mutate(
+    numMinorityDir = ifelse(minorityDir == "left", numLeft, numRight),
+    wentMinority = ifelse(dir_atSnap == minorityDir, "yes", "no")
+  ) %>%
   filter(numMinorityDir == OLM_upby) %>%
   select(gameId, playId, nflId, position, x, y, club, possessionTeam, wherePlayWent, dir_atSnap, minorityDir, wentMinority)
-  
+
 all_LM <- left_join(DL_info, designed_runs) %>%
   mutate(ball_snap_frame = ifelse(event == "ball_snap", frameId, NA)) %>%
   fill(ball_snap_frame, .direction = c("updown")) %>%
   filter(frameId %in% c(ball_snap_frame)) %>%
   filter(isInBox == "yes" & isonLOS == "yes") %>%
   select(gameId, playId, nflId, position, x, y, club, possessionTeam, wherePlayWent) %>%
-  rbind(processing)
-  
+  rbind(processing) %>%
+  group_by(gameId, playId) %>%
+  filter(sum(wentMinority == "yes", na.rm = T) <= 1)
+
 
 # Define the sideline values
-left_sideline_y <- 50
+left_sideline_y <- 53.3
 right_sideline_y <- 0
 
 # Function to find the nearest offensive lineman or sideline in the direction of the play
@@ -227,14 +246,14 @@ is_defender_in_gap <- function(ol_row, ol_df, def_df) {
   nearest_ol_y <- find_nearest_ol_or_sideline(ol_row, ol_df)
   gap_min_y <- min(ol_row$y, nearest_ol_y)
   gap_max_y <- max(ol_row$y, nearest_ol_y)
-  
+
   any_defender_in_gap <- any(
-    def_df$gameId == ol_row$gameId & 
-    def_df$playId == ol_row$playId &
-    def_df$y >= gap_min_y & 
-    def_df$y <= gap_max_y
+    def_df$gameId == ol_row$gameId &
+      def_df$playId == ol_row$playId &
+      def_df$y >= gap_min_y &
+      def_df$y <= gap_max_y
   )
-  
+
   return(any_defender_in_gap)
 }
 
@@ -245,9 +264,10 @@ ol_minority_df <- all_LM %>% filter(wentMinority == "yes")
 
 ol_minority_df <- ol_minority_df %>%
   rowwise() %>%
-  mutate(defenderInGap = is_defender_in_gap(cur_data_all(), ol_df, def_df))
+  mutate(defenderInGap = is_defender_in_gap(cur_data_all(), ol_df, def_df)) %>%
+  ungroup() 
 
-ol_tracking_data <- ol_minority_df %>% 
+ol_tracking_data <- ol_minority_df %>%
   group_by(gameId, playId) %>%
   mutate(all_defenderInGap = all(defenderInGap == FALSE)) %>%
   filter(all_defenderInGap == TRUE) %>%
@@ -255,74 +275,111 @@ ol_tracking_data <- ol_minority_df %>%
   left_join(all_LM) %>%
   filter(club == possessionTeam) %>%
   distinct(gameId, playId, nflId, wentMinority) %>%
-  left_join(designed_runs, by = c("gameId", "playId", "nflId")) 
+  left_join(designed_runs, by = c("gameId", "playId", "nflId")) %>%
+  left_join(ol_minority_df %>% distinct(gameId, nflId, defenderInGap)) %>%
+  mutate(defenderInGap = ifelse(is.na(defenderInGap), TRUE, FALSE)) %>%
+  distinct(gameId, playId, nflId, frameId, .keep_all = TRUE)
+
+dl_tracking_data <- all_LM %>%
+  filter(club != possessionTeam) %>%
+  distinct(gameId, playId, nflId) %>%
+  left_join(right_join(designed_runs, ol_tracking_data %>% distinct(gameId, playId)))
+
+# Lineman tracking data for plays where a player went minority direction and had no defender in the gap
+lm_tracking_data <- rbind(ol_tracking_data, dl_tracking_data) %>% filter(!is.na(frameId))
 
 
+ol_questionPlayer_td <- ol_tracking_data %>%
+  filter(wentMinority == "yes" & defenderInGap == FALSE) %>%
+  distinct(gameId, playId, nflId, frameId, .keep_all = TRUE)
 
-# Assuming 'ol_tracking_data' contains tracking data with frameId, gameId, playId, nflId, x, y
-# and 'ol_minority_df' contains linemen who went minority with gameId, playId, nflId, minorityDir
+count_passed_players <- function(player_id, player_gameId, player_playId, all_players_data) {
+  # Select the player's data from all_players_data
+  player_data <- all_players_data[
+    all_players_data$gameId == player_gameId &
+      all_players_data$playId == player_playId,
+  ]
 
-# Define the snap frame
-snap_frame_id <- 6
+  # Determine the frame range to check
+  frames_to_check <- 5:20
+  passed_players_ids <- numeric()
 
-# Function to check if the offensive lineman is pulling
-is_lineman_pulling <- function(ol_row, tracking_data, snap_frame_id) {
-  print(paste("Checking for gameId:", ol_row$gameId, "playId:", ol_row$playId, "nflId:", ol_row$nflId))
-  # Filter the tracking data for the lineman in question
-  lineman_tracking <- tracking_data %>%
-    filter(gameId == ol_row$gameId, playId == ol_row$playId, nflId == ol_row$nflId)
+  for (frame in frames_to_check[-length(frames_to_check)]) {
+    current_frame_data <- player_data[player_data$frameId == frame, ]
+    next_frame_data <- player_data[player_data$frameId == frame + 1, ]
 
-  # Get the lineman's direction of movement at the snap and the next few frames
-  direction_data <- lineman_tracking %>%
-    filter(frameId >= snap_frame_id & frameId <= snap_frame_id + 3) %>%
-    select(frameId, dir)
+    # Ensure that we have data for the current and next frames
+    if (nrow(current_frame_data) != 0 && nrow(next_frame_data) != 0) {
+      player_current_frame <- player_data[player_data$frameId == frame &
+        player_data$nflId == player_id, ]
+      other_players_current_frame <- player_data[player_data$frameId == frame &
+        player_data$nflId != player_id, ]
+      player_next_frame <- player_data[player_data$frameId == frame + 1 &
+        player_data$nflId == player_id, ]
+      other_players_next_frame <- player_data[player_data$frameId == frame + 1 &
+        player_data$nflId != player_id, ]
+      # Logic to determine if players were passed, based on direction and y coordinate changes
+      if (player_next_frame$x - player_current_frame$x > 0) {
+        # Passed if y coordinate goes from greater to lesser
+        passed_this_frame <- other_players_current_frame[other_players_current_frame$y > player_current_frame$y &
+          other_players_next_frame$y < player_next_frame$y &
+            other_players_current_frame$x > player_current_frame$x &
+            other_players_next_frame$x > player_next_frame$x, ]$nflId
+      } else {
+        # Passed if y coordinate goes from lesser to greater
+        passed_this_frame <- other_players_current_frame[other_players_current_frame$y < player_current_frame$y &
+          other_players_next_frame$y > player_next_frame$y &
+            other_players_current_frame$x > player_current_frame$x &
+            other_players_next_frame$x > player_next_frame$x, ]$nflId
+      }
 
-  if (nrow(direction_data) < 4) {
-    return(FALSE) # Not enough data to determine direction
+      # Update the vector of passed players
+      passed_players_ids <- unique(c(passed_players_ids, passed_this_frame))
+    }
   }
 
-  # Analyze direction change for pulling
-  initial_dir <- direction_data$dir[1]
-  subsequent_dirs <- direction_data$dir[-1]
-
-  # Check for significant lateral direction change
-  is_pulling <- FALSE
-  if (ol_row$minorityDir == "left") {
-    # Check for direction change towards the right
-    is_pulling <- any(subsequent_dirs > initial_dir + 45 & subsequent_dirs < initial_dir + 135)
-  } else {
-    # Check for direction change towards the left
-    is_pulling <- any(subsequent_dirs < initial_dir - 45 & subsequent_dirs > initial_dir - 135)
-  }
-
-  return(is_pulling)
+  return(length(passed_players_ids))
 }
 
-# Apply the pulling check
-ol_minority_df <- ol_minority_df %>%
-  rowwise() %>%
-  mutate(isPulling = is_lineman_pulling(cur_data(), ol_tracking_data, snap_frame_id)) %>%
-  ungroup()
 
-
+notPulling <- ol_questionPlayer_td %>%
+  group_by(gameId, playId, nflId) %>%
+  summarise(passedCount = count_passed_players(nflId, gameId, playId, ol_tracking_data)) %>%
+  filter(passedCount == 0) %>%
+  distinct(gameId, playId)
 ```
 
+
 ```{r}
-ggplot(all_LM %>% filter(gameId == 2022091803, playId == 1345), aes(x = x, y = y, color = club)) +
+valid_plays <- rbind(sameDir_yes, notPulling)
+
+WK2_SameDirection_TrackData <- left_join(valid_plays, designed_runs)
+```
+
+
+# USE WK2_SameDirection_TrackData for analysis of week 2
+
+
+
+
+
+
+```{r}
+ggplot(all_LM %>% filter(gameId == 2022091804, playId == 881), aes(x = x, y = y, color = club)) +
   geom_point()
 ```
 
 
 
 ```{r}
-test_run <- designed_runs %>% filter(gameId == 2022091801, playId == 2460)
-nfl_field(c(0,100)) +
+test_run <- designed_runs %>% filter(gameId == 2022091805, playId == 182)
+nfl_field(c(0, 120)) +
   geom_point(
     data = test_run, aes(x = x, y = y, color = club),
     show.legend = FALSE,
-    size = 3
+    size = 2
   ) +
+  # geom_point(data = test_run %>% filter(nflId == 46152), aes(x = x, y = y), color = "black") +
   transition_time(frameId) +
   scale_color_manual(values = c("purple", "yellow", "white"))
 ```
-
