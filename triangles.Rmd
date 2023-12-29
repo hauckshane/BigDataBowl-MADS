@@ -38,14 +38,124 @@ nfl_field <- function(xlims) {
 
 
 # Reading in the cleaned data: just inside zone run plays
-# USE WK2_SameDirection_TrackData for analysis of week 2
+## USE WK2_SameDirection_TrackData for analysis of week 2
 
+```{r}
+wk2_track_data <- read.csv("data/WK2_SameDirection_TrackData.csv")
+```
+
+Make gamePlayId which is a combination of gameId and playId. This helps us 
+identify each unique play.
+```{r}
+wk2_track_data$gamePlayId <- paste(wk2_track_data$gameId, wk2_track_data$playId)
+```
 
 # FINDING POINTS OF THE TRIANGLE
 
+We want to identify 3 points of the triangle which represents the ballCarrier's
+path: start, end, and furthest.
+
+Save these coordinates in the data. Then, we can calculate the angle of change.
+
+## Start
+(X,Y) of ballCarrier when event == “handoff”
+
+start_x, start_y, start_frameId
+
+```{r}
+start <- wk2_track_data %>%
+  filter(nflId == ballCarrierId) %>%
+  group_by(gamePlayId) %>%
+  filter(event == "handoff") %>%
+  reframe(start_x = x,
+          start_y = y,
+          start_frameId = frameId,
+          gamePlayId = gamePlayId)
+
+wk2_track_data <- merge(wk2_track_data, start, by = "gamePlayId")
+```
+
+## End
+If: event includes “tackle”, (X,Y) of ballCarrier when event == “tackle”
+Else: location where ballCarrier breaks gap point
+Shane’s soccer code: checks every player pairing and sees if ballCarrier line 
+crosses in-between lines
+
+Do when the player breaks gap point first, because they could be tackled 
+after that. Then, if end_x and end_y are NA for that play, check those plays 
+for the tackle events.
+
+end_x, end_y, end_frameId
+
+
+```{r}
+# Breaks the gap point
+# TODO
+```
+
+```{r}
+# Just the tackles
+end_tackles <- wk2_track_data %>%
+  filter(nflId == ballCarrierId) %>%
+  group_by(gamePlayId) %>%
+  filter(event == "tackle") %>%
+  reframe(end_x = x,
+          end_y = y,
+          end_frameId = frameId,
+          gamePlayId = gamePlayId)
+```
+
+```{r}
+# Merge back to the data
+# TODO
+wk2_track_data <- merge(wk2_track_data, end_tackles, by = "gamePlayId")
+```
+
+
+## Furthest
+Between start_frameID and end_frameID, take max of the absolute value of:
+1. Start Y - max Y
+2. Start Y - min Y
+
+furthest_x, furthest_y, furthest_frameId
+
+```{r}
+# Figure out furthest y coordinate (max of either direction)
+furthest_y <- wk2_track_data %>%
+  group_by(gamePlayId) %>%
+  filter(nflId == ballCarrierId) %>%
+  filter(frameId > start_frameId) %>%
+  filter(frameId < end_frameId) %>%
+  reframe(max_y = max(y),
+          min_y = min(y),
+          start_y = start_y,
+          abs_max_y = abs(start_y - max_y),
+          abs_min_y = abs(start_y - min_y),
+          furthest_y = ifelse(abs_max_y >= abs_min_y, max_y, min_y),
+          x = x,
+          y = y,
+          frameId = frameId)
+```
+
+```{r}
+# Grab the x coordinate where we see furthest_y
+furthest <- furthest_y %>%
+  group_by(gamePlayId) %>%
+  filter(y == furthest_y) %>%
+  reframe(furthest_x = x,
+          furthest_y = y,
+          furthest_frameId = frameId,
+          gamePlayId = gamePlayId)
+```
+
+```{r}
+# Merge back to the data
+wk2_track_data <- merge(wk2_track_data, furthest, by = "gamePlayId")
+```
 
 
 
+# Find angle of change
 
 
 
