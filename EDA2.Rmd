@@ -353,12 +353,36 @@ notPulling <- ol_questionPlayer_td %>%
 ```{r}
 valid_plays <- rbind(sameDir_yes, notPulling)
 
-WK2_SameDirection_TrackData <- left_join(valid_plays, designed_runs)
+WK2_SameDirection_TrackData <- left_join(valid_plays, designed_runs) %>% filter(!wherePlayWent %in% c("left end", "right end"))
+
+WK2_SameDirection_TrackData %>% distinct(gameId, playId) %>% nrow()
 ```
 
 
 # USE WK2_SameDirection_TrackData for analysis of week 2
 
+# Example intersection
+```{r eval=FALSE, include=FALSE}
+  # Calculate the slope and intercept of the line passing through the start and end points of the ball
+splitdata <- splitdata %>% 
+    mutate(slope = (BallY_2 - BallY_1) / (BallX_2 - BallX_1),
+           intercept = BallY_1 - slope * BallX_1)
+  
+ 
+  
+  # Check if there are two players with different y-coordinates for the same x-coordinate
+splitdata <- splitdata %>% group_by(GameEventID) %>%
+  mutate(splits_players = any((BallX_1 < PlayerX & BallX_2 > PlayerX &
+                                    slope * PlayerX + intercept < max(PlayerY) &
+                                    slope * PlayerX + intercept > min(PlayerY)) |
+                                   (BallX_1 > PlayerX & BallX_2 < PlayerX &
+                                      slope * PlayerX + intercept < max(PlayerY) &
+                                      slope * PlayerX + intercept > min(PlayerY))
+))
+
+# Returns boolean for whether the ball splits the players
+# I think this can work if you have a dataset with only ball carriers and offensive linemen
+```
 
 
 
