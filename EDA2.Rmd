@@ -359,7 +359,12 @@ WK2_SameDirection_TrackData %>% distinct(gameId, playId) %>% nrow()
 ```
 
 
-# USE WK2_SameDirection_TrackData for analysis of week 2
+# USE WK2_SameDirection_TrackData for analysis of week 2, save the data set
+
+```{r}
+# Save dataframe as CSV
+write.csv(WK2_SameDirection_TrackData, file = "data/WK2_SameDirection_TrackData.csv", row.names = FALSE)
+```
 
 # Example intersection
 ```{r eval=FALSE, include=FALSE}
