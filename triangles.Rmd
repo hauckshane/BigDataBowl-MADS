@@ -142,18 +142,31 @@ is_line_segment_intersect <- function(x1, y1, x2, y2, x3, y3, x4, y4) {
 
 # Function to check if ball carrier splits the gap
 check_intersection <- function(ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY, players_df) {
+  # Rank players by their y-coordinate
+  players_df$rank <- rank(players_df$y)
+  
   player_pairs <- combn(nrow(players_df), 2, simplify = FALSE)
 
-# this is where we check the player positions
-# tackles are next to guards, guards are next to centers
-# intuition: only check intersections next to each other by position
+  
   any(sapply(player_pairs, function(pair) {
     player1 <- players_df[pair[1], ]
     player2 <- players_df[pair[2], ]
-if((player1$position == "T" && player2$position == "C") | (player1$position == "C" && player2$position == "T")){
-return FALSE
-} 
-    is_line_segment_intersect(ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY, player1$x, player1$y, player2$x, player2$y)
+  
+    # intuition: only check intersections next to each other by position
+    # Based on the y coordinate, rank all offensive linemen from top to bottom
+    # If the difference in rank is 1, then the players are next to each other
+    # Return FALSE if the players are not next to each other
+    
+    # Check if the players are nect to each other based on their y-coordinate rank
+    if (abs(player1$rank - player2$rank) == 1) {
+      # If players are next to each other, check for line segment intersection
+      is_line_segment_intersect(ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY,
+                                player1$x, player1$y, player2$x, player2$y)
+    } else {
+      # return FALSE if the players are not next to each other
+      FALSE
+    }
+    
   }))
 }
 
@@ -164,12 +177,12 @@ return FALSE
 total_groups <- wk2_track_data %>%
   filter(position %in% c("T", "G", "C") | nflId == ballCarrierId) %>%
   count(gamePlayId, frameId) %>%
-  ungroup() %>% 
+  ungroup() %>%
   summarise(total = sum(n)) %>%
   pull(total)
 
 # Initialize progress bar
-pb <-  progress_bar$new(total = total_groups, format = " Processing [:bar] :percent :elapsed")
+pb <- progress_bar$new(total = total_groups, format = " Processing [:bar] :percent :elapsed")
 
 splitGap <- wk2_track_data %>%
   filter(position %in% c("T", "G", "C") | nflId == ballCarrierId) %>%
@@ -188,7 +201,6 @@ splitGap <- wk2_track_data %>%
           end_pos <- ball_carrier_positions[i, ]
           # Get positions of other players
           other_players <- filter(., nflId != ballCarrierId & frameId == ball_carrier_positions$frameId[i])
-          print(other_players)
           # Check for intersection
           if (nrow(other_players) > 1) {
             split_gap <- split_gap | check_intersection(start_pos$x, start_pos$y, end_pos$x, end_pos$y, other_players)

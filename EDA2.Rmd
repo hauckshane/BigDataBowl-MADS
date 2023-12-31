@@ -353,7 +353,7 @@ notPulling <- ol_questionPlayer_td %>%
 ```{r}
 valid_plays <- rbind(sameDir_yes, notPulling)
 
-WK2_SameDirection_TrackData <- left_join(valid_plays, designed_runs) %>% filter(!wherePlayWent %in% c("left end", "right end")) 
+WK2_SameDirection_TrackData <- left_join(valid_plays, designed_runs) %>% filter(!wherePlayWent %in% c("left end", "right end"))
 
 WK2_SameDirection_TrackData %>% distinct(gameId, playId) %>% nrow()
 ```
@@ -401,14 +401,15 @@ ggplot(all_LM %>% filter(gameId == 2022091804, playId == 881), aes(x = x, y = y,
 
 
 ```{r}
-test_run <- designed_runs %>% filter(gameId == 2022091500, playId == 996)
+test_run <- designed_runs %>% filter(gameId == 2022091500, playId == 1983)
 nfl_field(c(0, 120)) +
   geom_point(
     data = test_run, aes(x = x, y = y, color = club),
     show.legend = FALSE,
     size = 2
   ) +
-  # geom_point(data = test_run %>% filter(nflId == 46152), aes(x = x, y = y), color = "black") +
+  geom_point(data = test_run %>% filter(nflId == 47874), aes(x = x, y = y), color = "black") +
+  geom_point(data = test_run %>% filter(nflId == 53442), aes(x = x, y = y), color = "black") +
   transition_time(frameId) +
   scale_color_manual(values = c("purple", "yellow", "white"))
 ```
