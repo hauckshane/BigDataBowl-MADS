@@ -104,76 +104,68 @@ wk2_track_data <- wk2_track_data %>%
   fill(ballCarrierY, .direction = c("updown"))
 
 
-# Function to check if two line segments intersect
+# Function to check intersection between two line segments
+# Returns a list with the intersection status and point coordinates
 is_line_segment_intersect <- function(x1, y1, x2, y2, x3, y3, x4, y4) {
-  # Calculate the slope and intercept for both line segments
-  # Handling vertical lines separately
+  # Handle the cases where line segments are vertical
   vertical1 <- x1 == x2
   vertical2 <- x3 == x4
+  # [Additional logic for handling vertical lines can be added here]
 
-  if (vertical1 && vertical2) {
-    # Both lines are vertical - check if they are the same line and have overlapping y-ranges
-    return(x1 == x3 && min(y1, y2) <= max(y3, y4) && max(y1, y2) >= min(y3, y4))
-  } else if (vertical1 || vertical2) {
-    # One line is vertical - calculate intersection with the other line
-    if (vertical1) {
-      y_intersect <- (y3 - y4) / (x3 - x4) * (x1 - x3) + y3
-      return(y_intersect >= min(y1, y2) && y_intersect <= max(y1, y2) && x1 >= min(x3, x4) && x1 <= max(x3, x4))
-    } else {
-      y_intersect <- (y1 - y2) / (x1 - x2) * (x3 - x1) + y1
-      return(y_intersect >= min(y3, y4) && y_intersect <= max(y3, y4) && x3 >= min(x1, x2) && x3 <= max(x1, x2))
-    }
-  } else {
-    # Both lines are non-vertical - use the formula for intersection
+  # Calculate intersection for non-vertical line segments
+  if (!vertical1 && !vertical2) {
     slope1 <- (y2 - y1) / (x2 - x1)
     intercept1 <- y1 - slope1 * x1
     slope2 <- (y4 - y3) / (x4 - x3)
     intercept2 <- y3 - slope2 * x3
 
-    # Check if lines are parallel
-    if (slope1 == slope2) {
-      return(intercept1 == intercept2 && min(x1, x2) <= max(x3, x4) && max(x1, x2) >= min(x3, x4))
-    } else {
+    # Check if lines are non-parallel and calculate intersection point
+    if (slope1 != slope2) {
       x_intersect <- (intercept2 - intercept1) / (slope1 - slope2)
-      return(x_intersect >= min(x1, x2) && x_intersect <= max(x1, x2) && x_intersect >= min(x3, x4) && x_intersect <= max(x3, x4))
+      y_intersect <- slope1 * x_intersect + intercept1
+      
+      # Check if intersection point lies within the line segments
+      if (x_intersect >= min(x1, x2) && x_intersect <= max(x1, x2) &&
+          x_intersect >= min(x3, x4) && x_intersect <= max(x3, x4)) {
+        return(list(intersect = TRUE, x = x_intersect, y = y_intersect))
+      }
     }
   }
+
+  # No intersection found or unable to calculate
+  return(list(intersect = FALSE, x = NA, y = NA))
 }
 
-# Function to check if ball carrier splits the gap
+# Function to determine if the ball carrier splits the gap between two players
+# Returns intersection status and first intersection point if it exists
 check_intersection <- function(ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY, players_df) {
-  # Rank players by their y-coordinate
+  # Rank players by their y-coordinate for adjacency check
   players_df$rank <- rank(players_df$y)
-  
   player_pairs <- combn(nrow(players_df), 2, simplify = FALSE)
 
-  
-  any(sapply(player_pairs, function(pair) {
+  # Iterate through player pairs to check for intersection
+  for (pair in player_pairs) {
     player1 <- players_df[pair[1], ]
     player2 <- players_df[pair[2], ]
-  
-    # intuition: only check intersections next to each other by position
-    # Based on the y coordinate, rank all offensive linemen from top to bottom
-    # If the difference in rank is 1, then the players are next to each other
-    # Return FALSE if the players are not next to each other
-    
-    # Check if the players are nect to each other based on their y-coordinate rank
+
+    # Check if players are adjacent based on their y-coordinate rank
     if (abs(player1$rank - player2$rank) == 1) {
-      # If players are next to each other, check for line segment intersection
-      is_line_segment_intersect(ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY,
-                                player1$x, player1$y, player2$x, player2$y)
-    } else {
-      # return FALSE if the players are not next to each other
-      FALSE
+      result <- is_line_segment_intersect(
+        ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY,
+        player1$x, player1$y, player2$x, player2$y
+      )
+      # Return intersection result if found
+      if (result$intersect) {
+        return(result)
+      }
     }
-    
-  }))
+  }
+
+  # No intersection found among adjacent players
+  return(list(intersect = FALSE, x = NA, y = NA))
 }
 
-
-
-
-# Calculate total number of groups for progress bar
+# Calculate total number of groups for progress bar initialization
 total_groups <- wk2_track_data %>%
   filter(position %in% c("T", "G", "C") | nflId == ballCarrierId) %>%
   count(gamePlayId, frameId) %>%
@@ -181,40 +173,44 @@ total_groups <- wk2_track_data %>%
   summarise(total = sum(n)) %>%
   pull(total)
 
-# Initialize progress bar
+# Initialize progress bar for visual tracking of processing
 pb <- progress_bar$new(total = total_groups, format = " Processing [:bar] :percent :elapsed")
 
+# Process data to determine if ball carrier splits the gap
 splitGap <- wk2_track_data %>%
   filter(position %in% c("T", "G", "C") | nflId == ballCarrierId) %>%
   group_by(gamePlayId) %>%
   arrange(frameId) %>%
   do({
-    pb$tick() # Update progress bar
+    pb$tick() # Update progress bar for each group
     with(., {
-      # For each frame, find the ball carrier's position 1 frames before
       ball_carrier_positions <- filter(., nflId == ballCarrierId)
+      
+      # Iterate over positions to find first intersection
       if (nrow(ball_carrier_positions) > 2) {
-        split_gap <- FALSE
         for (i in 2:nrow(ball_carrier_positions)) {
-          # Ball carrier's start and end position for the line segment
           start_pos <- ball_carrier_positions[i - 1, ]
           end_pos <- ball_carrier_positions[i, ]
-          # Get positions of other players
           other_players <- filter(., nflId != ballCarrierId & frameId == ball_carrier_positions$frameId[i])
-          # Check for intersection
+          
+          # Check for intersection and return result if found
           if (nrow(other_players) > 1) {
-            split_gap <- split_gap | check_intersection(start_pos$x, start_pos$y, end_pos$x, end_pos$y, other_players)
+            result <- check_intersection(start_pos$x, start_pos$y, end_pos$x, end_pos$y, other_players)
+            if (result$intersect) {
+              return(data.frame(split_gap = TRUE, x_intersect = result$x, y_intersect = result$y))
+            }
           }
         }
-        return(data.frame(split_gap = split_gap))
+        return(data.frame(split_gap = FALSE, x_intersect = NA, y_intersect = NA))
       } else {
-        return(data.frame(split_gap = FALSE))
+        return(data.frame(split_gap = FALSE, x_intersect = NA, y_intersect = NA))
       }
     })
   }) %>%
   ungroup() %>%
+  # Summarize results across gamePlayIds
   group_by(gamePlayId) %>%
-  summarise(split_gap = any(split_gap), .groups = "drop")
+  summarise(split_gap = any(split_gap), x_intersect = first(x_intersect), y_intersect = first(y_intersect), .groups = "drop")
 ```
 
 ```{r}
