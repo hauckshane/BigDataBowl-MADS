@@ -351,7 +351,7 @@ facet_wrap(~playSide) +
 
 ```{r}
 # For each frame, calculate mean coordinates of surrounding frames and use them to calculate angles
-wk2_track_data <- wk2_track_data %>%
+ball_carrier_grouped <- wk2_track_data %>%
   filter(nflId == ballCarrierId) %>%
   group_by(gamePlayId) %>%
   arrange(gamePlayId, frameId) %>%
@@ -366,7 +366,7 @@ wk2_track_data <- wk2_track_data %>%
   ungroup()
 
 # Calculate the angle for each frame using mean coordinates
-wk2_track_data <- wk2_track_data %>%
+ball_carrier_grouped <- ball_carrier_grouped %>%
   rowwise() %>%
   mutate(
     angle = find.angle.f(mean_prev_x, mean_prev_y, mean_next_x, mean_next_y, mean_cur_x, mean_cur_y),
@@ -376,9 +376,9 @@ wk2_track_data <- wk2_track_data %>%
   ungroup()
 
 # Find the frame with the greatest change in direction and the corresponding angle
-max_angle_change <- wk2_track_data %>%
+max_angle_change <- ball_carrier_grouped %>%
   group_by(gamePlayId) %>%
-  filter(frameId > start_frameId + 5 & frameId < end_frameId - 5) %>%
+  filter(frameId >= start_frameId & frameId <= end_frameId) %>%
   filter(angle_diff_from_180 == max(angle_diff_from_180, na.rm = TRUE)) %>%
   reframe(playSide,
     angle_at_max_diff = first(angle),
@@ -446,6 +446,27 @@ ggplot(full_angle %>% filter(expectedPointsAdded != min(expectedPointsAdded)), a
   facet_wrap(~playSide) 
 
 ```
+
+```{r}
+wk2_track_data <- merge(wk2_track_data, full_angle %>% select(gamePlayId, angle_greatestChange), by = "gamePlayId")
+```
+
+# Find player who is setting the edge at a given time
+For playside left:
+Player who is closest to ball carrier with a larger y coordinate at greatest rate of change.
+For playside right:
+Player who is closest to ball carrier with a smaller y coordinate at greatest rate of change.
+
+```{r eval=FALSE, include=FALSE}
+wk2_track_data %>%
+  group_by(gamePlayId, frameId) %>%
+  filter(club != possessionTeam) %>%
+  # calculate player distance from ball carrier
+  mutate(distance_from_ballCarrier = sqrt((x - ballCarrier_x)^2 + (y - ballCarrier_y)^2)) %>%
+  filter(ifelse())
+```
+
+
 
 # Save the data
 Saving the data as wk2_triangles.csv
