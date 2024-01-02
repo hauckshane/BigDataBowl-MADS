@@ -100,18 +100,20 @@ sameDir <- designed_runs %>%
   group_by(gameId, playId, nflId) %>%
   mutate(ball_snap_y = ifelse(frameId == 5, y, NA)) %>%
   fill(ball_snap_y, .direction = "updown") %>%
-  mutate(frame_7_y = ifelse(frameId == 7, y, NA)) %>%
-  fill(frame_7_y, .direction = "updown") %>%
-  mutate(y_change = frame_7_y - ball_snap_y) %>%
+  mutate(frame_10_y = ifelse(frameId == 10, y, NA)) %>%
+  fill(frame_10_y, .direction = "updown") %>%
+  mutate(y_change = frame_10_y - ball_snap_y) %>%
   mutate(dir_atSnap = ifelse(y_change > 0, "left", "right")) %>%
   group_by(gameId, playId) %>%
   mutate(same_dir = ifelse(all(dir_atSnap == first(dir_atSnap)), "yes", "no")) %>%
-  distinct(gameId, playId, same_dir)
+  distinct(gameId, playId, dir_atSnap, same_dir) %>%
+  slice(1)
 
 # plays where all offensive lineman and running backs take same same first step
 sameDir_yes <- sameDir %>%
   filter(same_dir == "yes") %>%
-  distinct(gameId, playId)
+  rename(playSide = dir_atSnap) %>%
+  distinct(gameId, playId, playSide)
 
 ```
 
@@ -175,7 +177,7 @@ processing <- right_join(DL_info, designed_runs %>% group_by(gameId, playId, nfl
     OLM_outnumbered = ifelse(numOLM <= numonLOSInBox, "yes", "no"),
     OLM_upby = numOLM - numonLOSInBox
   ) %>%
-  left_join(sameDir) %>%
+  left_join(sameDir %>% select(-dir_atSnap)) %>%
   mutate(same_dir_exception = ifelse(same_dir == "no" & OLM_outnumbered == "no", "yes", "no")) %>%
   right_join(designed_runs) %>%
   filter(same_dir_exception == "yes") %>%
@@ -215,7 +217,7 @@ all_LM <- left_join(DL_info, designed_runs) %>%
   select(gameId, playId, nflId, position, x, y, club, possessionTeam, wherePlayWent) %>%
   rbind(processing) %>%
   group_by(gameId, playId) %>%
-  filter(sum(wentMinority == "yes", na.rm = T) <= 1)
+  filter(sum(wentMinority == "yes", na.rm = T) == 1)
 
 
 # Define the sideline values
@@ -347,6 +349,12 @@ notPulling <- ol_questionPlayer_td %>%
   summarise(passedCount = count_passed_players(nflId, gameId, playId, ol_tracking_data)) %>%
   filter(passedCount == 0) %>%
   distinct(gameId, playId)
+
+# Get playside
+notPulling <- left_join(notPulling, all_LM %>% distinct(gameId, playId, minorityDir)) %>%
+  na.omit() %>%
+  mutate(playSide = ifelse(minorityDir == "left", "right", "left")) %>%
+  select(-minorityDir)
 ```
 
 
@@ -392,24 +400,15 @@ splitdata <- splitdata %>% group_by(GameEventID) %>%
 
 
 
-
 ```{r}
-ggplot(all_LM %>% filter(gameId == 2022091804, playId == 881), aes(x = x, y = y, color = club)) +
-  geom_point()
-```
-
-
-
-```{r}
-test_run <- designed_runs %>% filter(gameId == 2022091500, playId == 1983)
+test_run <- designed_runs %>% filter(gameId == 2022091811, playId == 3428)
 nfl_field(c(0, 120)) +
   geom_point(
     data = test_run, aes(x = x, y = y, color = club),
     show.legend = FALSE,
     size = 2
   ) +
-  geom_point(data = test_run %>% filter(nflId == 47874), aes(x = x, y = y), color = "black") +
-  geom_point(data = test_run %>% filter(nflId == 53442), aes(x = x, y = y), color = "black") +
+  #geom_point(data = test_run %>% filter(nflId == 47874), aes(x = x, y = y), color = "black") +
   transition_time(frameId) +
   scale_color_manual(values = c("purple", "yellow", "white"))
 ```

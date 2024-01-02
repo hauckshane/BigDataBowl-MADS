@@ -107,24 +107,24 @@ wk2_track_data <- wk2_track_data %>%
 # Function to check intersection between two line segments
 # Returns a list with the intersection status and point coordinates
 is_line_segment_intersect <- function(x1, y1, x2, y2, x3, y3, x4, y4) {
-  # Handle the cases where line segments are vertical
+  # Handle cases of vertical line segments
   vertical1 <- x1 == x2
   vertical2 <- x3 == x4
-  # [Additional logic for handling vertical lines can be added here]
+  # [Additional logic for vertical lines can be added here]
 
-  # Calculate intersection for non-vertical line segments
+  # For non-vertical lines, calculate intersection point
   if (!vertical1 && !vertical2) {
     slope1 <- (y2 - y1) / (x2 - x1)
     intercept1 <- y1 - slope1 * x1
     slope2 <- (y4 - y3) / (x4 - x3)
     intercept2 <- y3 - slope2 * x3
 
-    # Check if lines are non-parallel and calculate intersection point
+    # Check if non-parallel lines intersect
     if (slope1 != slope2) {
       x_intersect <- (intercept2 - intercept1) / (slope1 - slope2)
       y_intersect <- slope1 * x_intersect + intercept1
       
-      # Check if intersection point lies within the line segments
+      # Ensure intersection point lies within both line segments
       if (x_intersect >= min(x1, x2) && x_intersect <= max(x1, x2) &&
           x_intersect >= min(x3, x4) && x_intersect <= max(x3, x4)) {
         return(list(intersect = TRUE, x = x_intersect, y = y_intersect))
@@ -132,40 +132,40 @@ is_line_segment_intersect <- function(x1, y1, x2, y2, x3, y3, x4, y4) {
     }
   }
 
-  # No intersection found or unable to calculate
+  # No intersection or calculation not possible
   return(list(intersect = FALSE, x = NA, y = NA))
 }
 
-# Function to determine if the ball carrier splits the gap between two players
-# Returns intersection status and first intersection point if it exists
-check_intersection <- function(ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY, players_df) {
-  # Rank players by their y-coordinate for adjacency check
+# Function to determine if ball carrier splits the gap between players
+# Returns intersection status, point, and frameId
+check_intersection <- function(frameId, ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY, players_df) {
+  # Rank players by y-coordinate for adjacency check
   players_df$rank <- rank(players_df$y)
   player_pairs <- combn(nrow(players_df), 2, simplify = FALSE)
 
-  # Iterate through player pairs to check for intersection
+  # Iterate through player pairs for intersection check
   for (pair in player_pairs) {
     player1 <- players_df[pair[1], ]
     player2 <- players_df[pair[2], ]
 
-    # Check if players are adjacent based on their y-coordinate rank
+    # Check adjacency based on y-coordinate rank
     if (abs(player1$rank - player2$rank) == 1) {
       result <- is_line_segment_intersect(
         ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY,
         player1$x, player1$y, player2$x, player2$y
       )
-      # Return intersection result if found
       if (result$intersect) {
-        return(result)
+        # Return intersection details including frameId
+        return(c(result, frameId = frameId))
       }
     }
   }
 
   # No intersection found among adjacent players
-  return(list(intersect = FALSE, x = NA, y = NA))
+  return(list(intersect = FALSE, x = NA, y = NA, frameId = frameId))
 }
 
-# Calculate total number of groups for progress bar initialization
+# Calculate total number of groups for progress bar
 total_groups <- wk2_track_data %>%
   filter(position %in% c("T", "G", "C") | nflId == ballCarrierId) %>%
   count(gamePlayId, frameId) %>%
@@ -173,52 +173,59 @@ total_groups <- wk2_track_data %>%
   summarise(total = sum(n)) %>%
   pull(total)
 
-# Initialize progress bar for visual tracking of processing
+# Initialize progress bar for process monitoring
 pb <- progress_bar$new(total = total_groups, format = " Processing [:bar] :percent :elapsed")
 
-# Process data to determine if ball carrier splits the gap
+# Process data to find first gap split by ball carrier
 splitGap <- wk2_track_data %>%
   filter(position %in% c("T", "G", "C") | nflId == ballCarrierId) %>%
   group_by(gamePlayId) %>%
   arrange(frameId) %>%
   do({
-    pb$tick() # Update progress bar for each group
+    pb$tick() # Update progress bar
     with(., {
       ball_carrier_positions <- filter(., nflId == ballCarrierId)
-      
-      # Iterate over positions to find first intersection
       if (nrow(ball_carrier_positions) > 2) {
         for (i in 2:nrow(ball_carrier_positions)) {
           start_pos <- ball_carrier_positions[i - 1, ]
           end_pos <- ball_carrier_positions[i, ]
-          other_players <- filter(., nflId != ballCarrierId & frameId == ball_carrier_positions$frameId[i])
+          current_frameId <- end_pos$frameId
+          other_players <- filter(., nflId != ballCarrierId & frameId == current_frameId)
           
-          # Check for intersection and return result if found
+          # Check for intersection and return result with frameId
           if (nrow(other_players) > 1) {
-            result <- check_intersection(start_pos$x, start_pos$y, end_pos$x, end_pos$y, other_players)
+            result <- check_intersection(current_frameId, start_pos$x, start_pos$y, end_pos$x, end_pos$y, other_players)
             if (result$intersect) {
-              return(data.frame(split_gap = TRUE, x_intersect = result$x, y_intersect = result$y))
+              return(data.frame(split_gap = TRUE, x_intersect = result$x, y_intersect = result$y, frameId = result$frameId))
             }
           }
         }
-        return(data.frame(split_gap = FALSE, x_intersect = NA, y_intersect = NA))
+        return(data.frame(split_gap = FALSE, x_intersect = NA, y_intersect = NA, frameId = NA))
       } else {
-        return(data.frame(split_gap = FALSE, x_intersect = NA, y_intersect = NA))
+        return(data.frame(split_gap = FALSE, x_intersect = NA, y_intersect = NA, frameId = NA))
       }
     })
   }) %>%
   ungroup() %>%
   # Summarize results across gamePlayIds
   group_by(gamePlayId) %>%
-  summarise(split_gap = any(split_gap), x_intersect = first(x_intersect), y_intersect = first(y_intersect), .groups = "drop")
+  summarise(split_gap = any(split_gap), x_intersect = first(x_intersect), y_intersect = first(y_intersect), frameId_intersect = first(frameId), .groups = "drop")
+
 ```
 
 ```{r}
-# Just the tackles
-end_tackles <- wk2_track_data %>%
+wk2_track_data <- merge(wk2_track_data, splitGap, by = "gamePlayId")
+```
+
+
+```{r}
+# Just the first of tackle, first_contact, touchdown, or out of bounds that occurs
+triangle_end_point <- wk2_track_data %>%
   filter(nflId == ballCarrierId) %>%
   group_by(gamePlayId) %>%
-  filter(event == "tackle") %>%
+  filter(event %in% c("tackle", "first_contact", "touchdown", "out_of_bounds") | 
+           frameId == frameId_intersect) %>%
+  filter(frameId == min(frameId)) %>%
   reframe(
     end_x = x,
     end_y = y,
@@ -227,15 +234,18 @@ end_tackles <- wk2_track_data %>%
   )
 ```
 
+
 ```{r}
 # Merge back to the data
-# TODO
-wk2_track_data <- merge(wk2_track_data, end_tackles, by = "gamePlayId")
+wk2_track_data <- merge(wk2_track_data, triangle_end_point, by = "gamePlayId")
+
 ```
 
 
 ## Furthest
-Between start_frameID and end_frameID, take max of the absolute value of:
+If ball carrier didn't split a gap do between start_frameID and frame before first contact. 
+If ball carrier split a gap do between start_frameID and frameId_intersect.
+Them take max of the absolute value of:
 1. Start Y - max Y
 2. Start Y - min Y
 
@@ -246,8 +256,7 @@ furthest_x, furthest_y, furthest_frameId
 furthest_y <- wk2_track_data %>%
   group_by(gamePlayId) %>%
   filter(nflId == ballCarrierId) %>%
-  filter(frameId > start_frameId) %>%
-  filter(frameId < end_frameId) %>%
+  filter(frameId > start_frameId & frameId < end_frameId) %>%
   reframe(
     max_y = max(y),
     min_y = min(y),
@@ -271,14 +280,15 @@ furthest <- furthest_y %>%
     furthest_y = y,
     furthest_frameId = frameId,
     gamePlayId = gamePlayId
-  )
+  ) %>% 
+  group_by(gamePlayId) %>%
+  filter(furthest_frameId == min(furthest_frameId))
 ```
 
 ```{r}
 # Merge back to the data
 wk2_track_data <- merge(wk2_track_data, furthest, by = "gamePlayId")
 ```
-
 
 
 # Find angle of change
@@ -317,23 +327,117 @@ find.angle.f <- function(x_s, y_s, x_e, y_e, x_f, y_f) {
 
 ```{r}
 # Apply the function that calculates the angle to the data
-wk2_track_data$angle <- apply(wk2_track_data, 1, function(row) {
-  if (all(complete.cases(row[c(
-    "start_x", "start_y",
-    "end_x", "end_y",
-    "furthest_x", "furthest_y"
-  )]))) {
-    find.angle.f(
-      row[["start_x"]], row[["start_y"]],
-      row[["end_x"]], row[["end_y"]],
-      row[["furthest_x"]], row[["furthest_y"]]
-    )
-  } else {
-    NA
-  }
-})
+wk2_track_data <- wk2_track_data %>%
+  rowwise() %>%
+  mutate(angle_furthest = find.angle.f(start_x, start_y, end_x, end_y, furthest_x, furthest_y),
+         angle_furthest = ifelse(playSide == "left", 360 - angle_furthest, angle_furthest))
 ```
 
+```{r}
+ggplot(wk2_track_data %>% distinct(gamePlayId, angle_furthest, playSide), aes(x = angle_furthest)) +
+   geom_histogram() +
+facet_wrap(~playSide)
+```
+
+```{r}
+ggplot(wk2_track_data %>% distinct(gamePlayId, angle_furthest, playSide, expectedPointsAdded), aes(x = angle_furthest, y = expectedPointsAdded)) +
+  geom_point() +
+facet_wrap(~playSide) +
+  geom_smooth()
+```
+
+
+# Finding the greatest change in direction
+
+```{r}
+# For each frame, calculate mean coordinates of surrounding frames and use them to calculate angles
+wk2_track_data <- wk2_track_data %>%
+  filter(nflId == ballCarrierId) %>%
+  group_by(gamePlayId) %>%
+  arrange(gamePlayId, frameId) %>%
+  mutate(
+    mean_cur_x = rowMeans(cbind(lag(x, 1, default = NA), x, lead(x, 1, default = NA)), na.rm = TRUE),
+    mean_cur_y = rowMeans(cbind(lag(y, 1, default = NA), y, lead(y, 1, default = NA)), na.rm = TRUE),
+    mean_prev_x = rowMeans(cbind(lag(x, 2, default = NA), lag(x, 3, default = NA), lag(x, 4, default = NA)), na.rm = TRUE),
+    mean_prev_y = rowMeans(cbind(lag(y, 2, default = NA), lag(y, 3, default = NA), lag(y, 4, default = NA)), na.rm = TRUE),
+    mean_next_x = rowMeans(cbind(lead(x, 2, default = NA), lead(x, 3, default = NA), lead(x, 4, default = NA)), na.rm = TRUE),
+    mean_next_y = rowMeans(cbind(lead(y, 2, default = NA), lead(y, 3, default = NA), lead(y, 4, default = NA)), na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# Calculate the angle for each frame using mean coordinates
+wk2_track_data <- wk2_track_data %>%
+  rowwise() %>%
+  mutate(
+    angle = find.angle.f(mean_prev_x, mean_prev_y, mean_next_x, mean_next_y, mean_cur_x, mean_cur_y),
+    angle = ifelse(playSide == "left", 360 - angle, angle),
+    angle_diff_from_180 = abs(180 - angle)
+  ) %>%
+  ungroup()
+
+# Find the frame with the greatest change in direction and the corresponding angle
+max_angle_change <- wk2_track_data %>%
+  group_by(gamePlayId) %>%
+  filter(frameId > start_frameId & frameId < end_frameId) %>%
+  filter(angle_diff_from_180 == max(angle_diff_from_180, na.rm = TRUE)) %>%
+  reframe(playSide,
+    angle_at_max_diff = first(angle),
+    frameId_at_max_diff = first(frameId)
+  ) %>%
+  distinct(gamePlayId, playSide, angle_at_max_diff, frameId_at_max_diff)
+```
+
+```{r}
+wk2_track_data <- merge(wk2_track_data, max_angle_change %>% select(-playSide), by = "gamePlayId")
+```
+
+
+```{r}
+ggplot(max_angle_change, aes(x = angle_at_max_diff)) +
+   geom_histogram() +
+facet_wrap(~playSide)
+
+ggplot(wk2_track_data %>% distinct(gamePlayId, angle_at_max_diff, playSide, expectedPointsAdded), aes(x = angle_at_max_diff, y = expectedPointsAdded)) +
+  geom_point() +
+  facet_wrap(~playSide) +
+  geom_smooth()
+
+ggplot(wk2_track_data %>% distinct(gamePlayId, start_frameId,frameId_at_max_diff, playSide, expectedPointsAdded), aes(x = frameId_at_max_diff - start_frameId, y = expectedPointsAdded)) +
+  geom_point() +
+  facet_wrap(~playSide) +
+  geom_smooth()
+```
+
+
+```{r}
+wk2_track_data %>% group_by(gamePlayId) %>%
+  reframe(frame_comparison = abs(frameId_at_max_diff - furthest_frameId)) %>%
+  distinct(gamePlayId, frame_comparison) %>%
+  ggplot(aes(x = frame_comparison)) + geom_histogram()
+```
+
+# Where the greates change in direction occurs calculate that angle with the end point
+
+```{r}
+full_angle <- wk2_track_data %>%
+  filter(nflId == ballCarrierId) %>%
+  filter(frameId == frameId_at_max_diff) %>%
+  mutate(
+    angle_greatestChange = find.angle.f(start_x, start_y, end_x, end_y, x, y),
+    angle_greatestChange = ifelse(playSide == "left", 360 - angle_greatestChange, angle_greatestChange)
+  )
+  
+```
+
+```{r}
+ggplot(full_angle, aes(x = angle_greatestChange)) +
+   geom_histogram() +
+facet_wrap(~playSide)
+
+ggplot(full_angle %>% filter(expectedPointsAdded != min(expectedPointsAdded)), aes(x = angle_at_max_diff, y = expectedPointsAdded)) +
+  geom_point() +
+  geom_smooth()
+```
 
 # Save the data
 Saving the data as wk2_triangles.csv
