@@ -638,6 +638,30 @@ full_angle <- SameDirection_TrackData %>%
   )
 ```
 
+```{r}
+SameDirection_TrackData <- merge(SameDirection_TrackData, full_angle 
+                                 %>% select(gamePlayId, angle_greatestChange), 
+                                 by = "gamePlayId")
+```
+
+# Find player who is setting the edge at a given time
+
+For playside left:
+Player who is closest to ball carrier with a larger y coordinate at 
+greatest rate of change.
+For playside right:
+Player who is closest to ball carrier with a smaller y coordinate at 
+greatest rate of change.
+
+```{r eval=FALSE, include=FALSE}
+SameDirection_TrackData %>%
+  group_by(gamePlayId, frameId) %>%
+  filter(club != possessionTeam) %>%
+  # calculate player distance from ball carrier
+  mutate(distance_from_ballCarrier = sqrt((x - ballCarrier_x)^2 + (y - ballCarrier_y)^2)) %>%
+  filter(ifelse())
+```
+
 # Save resulting data as processed_data.csv
 
 ```{r}
