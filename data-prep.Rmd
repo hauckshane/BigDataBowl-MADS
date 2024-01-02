@@ -1,0 +1,648 @@
+---
+title: "Data Preparation"
+author: "Shane Hauck, Marion Haney, Devin Basley, Vinay Maruri"
+date: "2024-1-02"
+output: html_document
+---
+
+Combination of EDA2.Rmd and triangles.Rmd
+Run to get triangle/angle of change data for all weeks.
+
+# Read in libraries
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(progress)
+library(tidyverse)
+library(gganimate)
+theme_set(theme_bw())
+
+library(sportyR)
+field_params <- list(
+  field_apron = "springgreen3",
+  field_border = "springgreen3",
+  offensive_endzone = "springgreen3",
+  defensive_endzone = "springgreen3",
+  offensive_half = "springgreen3",
+  defensive_half = "springgreen3"
+)
+
+nfl_field <- function(xlims) {
+  geom_football(
+    league = "nfl",
+    display_range = "full",
+    x_trans = 60,
+    y_trans = 26.6667,
+    xlims = xlims,
+    color_updates = field_params
+  )
+}
+```
+
+```{r}
+tracking_file <- "data/tracking_week_1.csv"
+```
+
+# Initial data cleaning pass
+
+```{r}
+players <- read_csv("data/players.csv")
+plays <- read_csv("data/plays.csv")
+tracking <- read_csv(tracking_file) %>%
+  mutate(
+    # make all plays go from left to right
+    x = ifelse(playDirection == "left", 120 - x, x),
+    y = ifelse(playDirection == "left", 160 / 3 - y, y),
+    # flip player direction and orientation
+    dir = ifelse(playDirection == "left", dir + 180, dir),
+    dir = ifelse(dir > 360, dir - 360, dir),
+    o = ifelse(playDirection == "left", o + 180, o),
+    o = ifelse(o > 360, o - 360, o)
+  )
+
+focused_df <- left_join(tracking, plays) %>%
+  left_join(players) %>%
+  select(
+    gameId, playId, nflId, position, frameId, x, y, s, a, dis, o, dir, event,
+    playDescription, ballCarrierId, club, possessionTeam, defensiveTeam,
+    playResult, playNullifiedByPenalty, offenseFormation, defendersInTheBox,
+    expectedPoints, expectedPointsAdded
+  )
+```
+
+
+```{r}
+# Keep plays where a snap occurs (see kaggle for description of designed rushes)
+snapped_plays <- focused_df %>%
+  filter(event == "ball_snap") %>%
+  distinct(gameId, playId) %>%
+  left_join(focused_df)
+
+# Filter out any quick passing plays
+designed_runs <- snapped_plays %>%
+  filter(event %in% c("run", "lateral", "handoff")) %>%
+  distinct(gameId, playId) %>%
+  left_join(snapped_plays)
+
+# Accurately removed passing plays that included a snap of the ball
+snapped_plays %>%
+  filter(event == "pass_forward") %>%
+  distinct(gameId, playId) %>%
+  nrow()
+```
+
+
+```{r}
+# Add variable for the section of the field where the play went and playside
+designed_runs <- designed_runs %>%
+  mutate(wherePlayWent = str_extract(playDescription, "(left|right|up the) (guard|tackle|end|middle)")) %>%
+  mutate(ballY_preSnap = ifelse(frameId == 5 & club == "football", y, NA)) %>%
+  group_by(gameId, playId) %>%
+  fill(ballY_preSnap, .direction = c("updown")) %>%
+  mutate(ballCarrierY = ifelse(nflId == ballCarrierId, y, NA)) %>%
+  fill(ballCarrierY, .direction = c("updown"))
+
+# plays where all offensive lineman and running backs take same same first step
+sameDir <- designed_runs %>%
+  filter(position %in% c("T", "G", "C") | nflId == ballCarrierId) %>%
+  group_by(gameId, playId, nflId) %>%
+  mutate(ball_snap_y = ifelse(frameId == 5, y, NA)) %>%
+  fill(ball_snap_y, .direction = "updown") %>%
+  mutate(frame_10_y = ifelse(frameId == 10, y, NA)) %>%
+  fill(frame_10_y, .direction = "updown") %>%
+  mutate(y_change = frame_10_y - ball_snap_y) %>%
+  mutate(dir_atSnap = ifelse(y_change > 0, "left", "right")) %>%
+  group_by(gameId, playId) %>%
+  mutate(same_dir = ifelse(all(dir_atSnap == first(dir_atSnap)), "yes", "no")) %>%
+  distinct(gameId, playId, dir_atSnap, same_dir) %>%
+  slice(1)
+
+# plays where all offensive lineman and running backs take same same first step
+sameDir_yes <- sameDir %>%
+  filter(same_dir == "yes") %>%
+  rename(playSide = dir_atSnap) %>%
+  distinct(gameId, playId, playSide)
+
+```
+
+
+```{r}
+DL_info <- designed_runs %>%
+  filter(club == defensiveTeam | club == "football") %>%
+  group_by(gameId, playId) %>%
+  # Identifying the frame before the ball snap
+  mutate(pre_ball_snap_frame = ifelse(event == "ball_snap", frameId - 1, NA)) %>%
+  fill(pre_ball_snap_frame, .direction = "updown") %>%
+  filter(frameId == pre_ball_snap_frame) %>%
+  # Assigning ball position
+  mutate(
+    ball_x = ifelse(club == "football", x, NA),
+    ball_y = ifelse(club == "football", y, NA)
+  ) %>%
+  fill(ball_x, ball_y, .direction = "updown") %>%
+  filter(club != "football") %>%
+  # Calculating distances and determining if defenders are in the box and on the LOS
+  mutate(
+    distance_to_ball = sqrt((x - ball_x)^2 + (y - ball_y)^2),
+    rank_distance_to_ball = rank(distance_to_ball),
+    isInBox = ifelse(rank_distance_to_ball <= defendersInTheBox, "yes", "no"),
+    distance_to_LOS = abs(x - ball_x),
+    isonLOS = ifelse(distance_to_LOS <= 2, "yes", "no")
+  ) %>%
+  select(gameId, playId, nflId, pre_ball_snap_frame, isInBox, isonLOS)
+
+
+processing <- right_join(DL_info, designed_runs %>% group_by(gameId, playId, nflId) %>%
+  mutate(ball_snap_y = ifelse(frameId == 5, y, NA)) %>%
+  fill(ball_snap_y, .direction = "updown") %>%
+  mutate(frame_7_y = ifelse(frameId == 7, y, NA)) %>%
+  fill(frame_7_y, .direction = "updown") %>%
+  mutate(y_change = frame_7_y - ball_snap_y) %>%
+  mutate(dir_atSnap = ifelse(y_change > 0, "left", "right")) %>%
+  group_by(gameId, playId) %>%
+  mutate(same_dir = ifelse(all(dir_atSnap == first(dir_atSnap)), "yes", "no"))) %>%
+  mutate(
+    isInBox = ifelse(is.na(isInBox), "no", isInBox),
+    isonLOS = ifelse(is.na(isonLOS), "no", isonLOS)
+  ) %>%
+  fill(pre_ball_snap_frame, .direction = c("updown")) %>%
+  filter(frameId == pre_ball_snap_frame) %>%
+  filter(club == possessionTeam |
+    (isInBox == "yes" & isonLOS == "yes")) %>%
+  filter(club != possessionTeam |
+    position %in% c("T", "G", "C") |
+    nflId == ballCarrierId) %>%
+  mutate(isOLM = ifelse(position %in% c("T", "G", "C"), 1, 0)) %>%
+  group_by(gameId, playId) %>%
+  mutate(
+    numOLM = sum(isOLM),
+    numOLM = ifelse(numOLM == 0, max(numOLM), numOLM)
+  ) %>%
+  filter(numOLM > 0) %>%
+  mutate(numonLOSInBox = sum(isonLOS == "yes" & isInBox == "yes")) %>%
+  distinct(gameId, playId, nflId, isInBox, isonLOS, numOLM, numonLOSInBox) %>%
+  mutate(
+    OLM_outnumbered = ifelse(numOLM <= numonLOSInBox, "yes", "no"),
+    OLM_upby = numOLM - numonLOSInBox
+  ) %>%
+  left_join(sameDir %>% select(-dir_atSnap)) %>%
+  mutate(same_dir_exception = ifelse(same_dir == "no" & OLM_outnumbered == "no", "yes", "no")) %>%
+  right_join(designed_runs) %>%
+  filter(same_dir_exception == "yes") %>%
+  filter(position %in% c("T", "G", "C") |
+    nflId == ballCarrierId) %>%
+  mutate(ball_snap_frame = ifelse(event == "ball_snap", frameId, NA)) %>%
+  fill(ball_snap_frame, .direction = c("updown")) %>%
+  filter(frameId %in% c(ball_snap_frame)) %>%
+  mutate(dir_atSnap = ifelse(dir >= 180, "left", "right")) %>%
+  # Count the number of players who went right and who went left
+  group_by(gameId, playId) %>%
+  mutate(
+    numLeft = sum(dir_atSnap == "left"),
+    numRight = sum(dir_atSnap == "right")
+  ) %>%
+  # Find the direction that the minority of players went
+  mutate(minorityDir = ifelse(numLeft < numRight, "left", "right")) %>%
+  mutate(ballCarrier_majorityDir = ifelse(nflId == ballCarrierId & dir_atSnap == minorityDir, "no", "yes")) %>%
+  # apply ballCarrier_majorityDir to all players for game and play
+  group_by(gameId, playId) %>%
+  mutate(ballCarrier_majorityDir = ifelse(any(ballCarrier_majorityDir == "yes"), "yes", "no")) %>%
+  filter(ballCarrier_majorityDir == "yes") %>%
+  filter(nflId != ballCarrierId) %>%
+  # Count the number of players that went the minority direction
+  mutate(
+    numMinorityDir = ifelse(minorityDir == "left", numLeft, numRight),
+    wentMinority = ifelse(dir_atSnap == minorityDir, "yes", "no")
+  ) %>%
+  filter(numMinorityDir == OLM_upby) %>%
+  select(gameId, playId, nflId, position, x, y, club, possessionTeam, wherePlayWent, dir_atSnap, minorityDir, wentMinority)
+
+all_LM <- left_join(DL_info, designed_runs) %>%
+  mutate(ball_snap_frame = ifelse(event == "ball_snap", frameId, NA)) %>%
+  fill(ball_snap_frame, .direction = c("updown")) %>%
+  filter(frameId %in% c(ball_snap_frame)) %>%
+  filter(isInBox == "yes" & isonLOS == "yes") %>%
+  select(gameId, playId, nflId, position, x, y, club, possessionTeam, wherePlayWent) %>%
+  rbind(processing) %>%
+  group_by(gameId, playId) %>%
+  filter(sum(wentMinority == "yes", na.rm = T) == 1)
+
+
+# Define the sideline values
+left_sideline_y <- 53.3
+right_sideline_y <- 0
+
+# Function to find the nearest offensive lineman or sideline in the direction of the play
+find_nearest_ol_or_sideline <- function(ol_row, ol_df) {
+  if (ol_row$minorityDir == "right") {
+    nearest_ol <- ol_df %>%
+      filter(gameId == ol_row$gameId, playId == ol_row$playId, nflId != ol_row$nflId, y > ol_row$y) %>%
+      arrange(y) %>%
+      slice(1) %>%
+      pull(y)
+    return(ifelse(length(nearest_ol) == 0, left_sideline_y, nearest_ol))
+  } else {
+    nearest_ol <- ol_df %>%
+      filter(gameId == ol_row$gameId, playId == ol_row$playId, nflId != ol_row$nflId, y < ol_row$y) %>%
+      arrange(desc(y)) %>%
+      slice(1) %>%
+      pull(y)
+    return(ifelse(length(nearest_ol) == 0, right_sideline_y, nearest_ol))
+  }
+}
+
+# Function to check for a defender in the gap
+is_defender_in_gap <- function(ol_row, ol_df, def_df) {
+  nearest_ol_y <- find_nearest_ol_or_sideline(ol_row, ol_df)
+  gap_min_y <- min(ol_row$y, nearest_ol_y)
+  gap_max_y <- max(ol_row$y, nearest_ol_y)
+
+  any_defender_in_gap <- any(
+    def_df$gameId == ol_row$gameId &
+      def_df$playId == ol_row$playId &
+      def_df$y >= gap_min_y &
+      def_df$y <= gap_max_y
+  )
+
+  return(any_defender_in_gap)
+}
+
+# Apply the function to the offensive linemen who went in the minority direction
+ol_df <- all_LM %>% filter(position %in% c("T", "G", "C"))
+def_df <- all_LM %>% filter(!(position %in% c("T", "G", "C")))
+ol_minority_df <- all_LM %>% filter(wentMinority == "yes")
+
+ol_minority_df <- ol_minority_df %>%
+  rowwise() %>%
+  mutate(defenderInGap = is_defender_in_gap(cur_data_all(), ol_df, def_df)) %>%
+  ungroup() 
+
+ol_tracking_data <- ol_minority_df %>%
+  group_by(gameId, playId) %>%
+  mutate(all_defenderInGap = all(defenderInGap == FALSE)) %>%
+  filter(all_defenderInGap == TRUE) %>%
+  distinct(gameId, playId) %>%
+  left_join(all_LM) %>%
+  filter(club == possessionTeam) %>%
+  distinct(gameId, playId, nflId, wentMinority) %>%
+  left_join(designed_runs, by = c("gameId", "playId", "nflId")) %>%
+  left_join(ol_minority_df %>% distinct(gameId, nflId, defenderInGap)) %>%
+  mutate(defenderInGap = ifelse(is.na(defenderInGap), TRUE, FALSE)) %>%
+  distinct(gameId, playId, nflId, frameId, .keep_all = TRUE)
+
+dl_tracking_data <- all_LM %>%
+  filter(club != possessionTeam) %>%
+  distinct(gameId, playId, nflId) %>%
+  left_join(right_join(designed_runs, ol_tracking_data %>% distinct(gameId, playId)))
+
+# Lineman tracking data for plays where a player went minority direction and had no defender in the gap
+lm_tracking_data <- rbind(ol_tracking_data, dl_tracking_data) %>% filter(!is.na(frameId))
+
+
+ol_questionPlayer_td <- ol_tracking_data %>%
+  filter(wentMinority == "yes" & defenderInGap == FALSE) %>%
+  distinct(gameId, playId, nflId, frameId, .keep_all = TRUE)
+
+count_passed_players <- function(player_id, player_gameId, player_playId, all_players_data) {
+  # Select the player's data from all_players_data
+  player_data <- all_players_data[
+    all_players_data$gameId == player_gameId &
+      all_players_data$playId == player_playId,
+  ]
+
+  # Determine the frame range to check
+  frames_to_check <- 5:20
+  passed_players_ids <- numeric()
+
+  for (frame in frames_to_check[-length(frames_to_check)]) {
+    current_frame_data <- player_data[player_data$frameId == frame, ]
+    next_frame_data <- player_data[player_data$frameId == frame + 1, ]
+
+    # Ensure that we have data for the current and next frames
+    if (nrow(current_frame_data) != 0 && nrow(next_frame_data) != 0) {
+      player_current_frame <- player_data[player_data$frameId == frame &
+        player_data$nflId == player_id, ]
+      other_players_current_frame <- player_data[player_data$frameId == frame &
+        player_data$nflId != player_id, ]
+      player_next_frame <- player_data[player_data$frameId == frame + 1 &
+        player_data$nflId == player_id, ]
+      other_players_next_frame <- player_data[player_data$frameId == frame + 1 &
+        player_data$nflId != player_id, ]
+      # Logic to determine if players were passed, based on direction and y coordinate changes
+      if (player_next_frame$x - player_current_frame$x > 0) {
+        # Passed if y coordinate goes from greater to lesser
+        passed_this_frame <- other_players_current_frame[other_players_current_frame$y > player_current_frame$y &
+          other_players_next_frame$y < player_next_frame$y &
+            other_players_current_frame$x > player_current_frame$x &
+            other_players_next_frame$x > player_next_frame$x, ]$nflId
+      } else {
+        # Passed if y coordinate goes from lesser to greater
+        passed_this_frame <- other_players_current_frame[other_players_current_frame$y < player_current_frame$y &
+          other_players_next_frame$y > player_next_frame$y &
+            other_players_current_frame$x > player_current_frame$x &
+            other_players_next_frame$x > player_next_frame$x, ]$nflId
+      }
+
+      # Update the vector of passed players
+      passed_players_ids <- unique(c(passed_players_ids, passed_this_frame))
+    }
+  }
+
+  return(length(passed_players_ids))
+}
+
+
+notPulling <- ol_questionPlayer_td %>%
+  group_by(gameId, playId, nflId) %>%
+  summarise(passedCount = count_passed_players(nflId, gameId, playId, ol_tracking_data)) %>%
+  filter(passedCount == 0) %>%
+  distinct(gameId, playId)
+
+# Get playside
+notPulling <- left_join(notPulling, all_LM %>% distinct(gameId, playId, minorityDir)) %>%
+  na.omit() %>%
+  mutate(playSide = ifelse(minorityDir == "left", "right", "left")) %>%
+  select(-minorityDir)
+```
+
+
+```{r}
+valid_plays <- rbind(sameDir_yes, notPulling)
+
+SameDirection_TrackData <- left_join(valid_plays, designed_runs) %>% filter(!wherePlayWent %in% c("left end", "right end"))
+
+SameDirection_TrackData %>% distinct(gameId, playId) %>% nrow()
+```
+
+
+# Calculate the points of the path triangle
+
+Make gamePlayId which is a combination of gameId and playId. This helps us 
+identify each unique play.
+
+```{r}
+SameDirection_TrackData$gamePlayId <- paste(SameDirection_TrackData$gameId,
+                                            SameDirection_TrackData$playId)
+```
+
+Start
+
+```{r}
+start <- SameDirection_TrackData %>%
+  filter(nflId == ballCarrierId) %>%
+  group_by(gamePlayId) %>%
+  filter(event == "handoff") %>%
+  reframe(
+    start_x = x,
+    start_y = y,
+    start_frameId = frameId,
+    gamePlayId = gamePlayId
+  )
+
+SameDirection_TrackData <- merge(SameDirection_TrackData, start, 
+                                 by = "gamePlayId")
+```
+
+End 
+
+```{r}
+# Breaks the gap point
+# Create Variables to get ball Carriers X and Y coordinates
+SameDirection_TrackData <- SameDirection_TrackData %>%
+  group_by(gamePlayId) %>%
+  mutate(
+    ballCarrierX = ifelse(nflId == ballCarrierId, x, NA),
+    ballCarrierY = ifelse(nflId == ballCarrierId, y, NA)
+  ) %>%
+  fill(ballCarrierX, .direction = c("updown")) %>%
+  fill(ballCarrierY, .direction = c("updown"))
+
+
+# Function to check intersection between two line segments
+# Returns a list with the intersection status and point coordinates
+is_line_segment_intersect <- function(x1, y1, x2, y2, x3, y3, x4, y4) {
+  # Handle cases of vertical line segments
+  vertical1 <- x1 == x2
+  vertical2 <- x3 == x4
+  # [Additional logic for vertical lines can be added here]
+
+  # For non-vertical lines, calculate intersection point
+  if (!vertical1 && !vertical2) {
+    slope1 <- (y2 - y1) / (x2 - x1)
+    intercept1 <- y1 - slope1 * x1
+    slope2 <- (y4 - y3) / (x4 - x3)
+    intercept2 <- y3 - slope2 * x3
+
+    # Check if non-parallel lines intersect
+    if (slope1 != slope2) {
+      x_intersect <- (intercept2 - intercept1) / (slope1 - slope2)
+      y_intersect <- slope1 * x_intersect + intercept1
+      
+      # Ensure intersection point lies within both line segments
+      if (x_intersect >= min(x1, x2) && x_intersect <= max(x1, x2) &&
+          x_intersect >= min(x3, x4) && x_intersect <= max(x3, x4)) {
+        return(list(intersect = TRUE, x = x_intersect, y = y_intersect))
+      }
+    }
+  }
+
+  # No intersection or calculation not possible
+  return(list(intersect = FALSE, x = NA, y = NA))
+}
+
+# Function to determine if ball carrier splits the gap between players
+# Returns intersection status, point, and frameId
+check_intersection <- function(frameId, ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY, players_df) {
+  # Rank players by y-coordinate for adjacency check
+  players_df$rank <- rank(players_df$y)
+  player_pairs <- combn(nrow(players_df), 2, simplify = FALSE)
+
+  # Iterate through player pairs for intersection check
+  for (pair in player_pairs) {
+    player1 <- players_df[pair[1], ]
+    player2 <- players_df[pair[2], ]
+
+    # Check adjacency based on y-coordinate rank
+    if (abs(player1$rank - player2$rank) == 1) {
+      result <- is_line_segment_intersect(
+        ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY,
+        player1$x, player1$y, player2$x, player2$y
+      )
+      if (result$intersect) {
+        # Return intersection details including frameId
+        return(c(result, frameId = frameId))
+      }
+    }
+  }
+
+  # No intersection found among adjacent players
+  return(list(intersect = FALSE, x = NA, y = NA, frameId = frameId))
+}
+
+# Calculate total number of groups for progress bar
+total_groups <- SameDirection_TrackData %>%
+  filter(position %in% c("T", "G", "C") | nflId == ballCarrierId) %>%
+  count(gamePlayId, frameId) %>%
+  ungroup() %>%
+  summarise(total = sum(n)) %>%
+  pull(total)
+
+# Initialize progress bar for process monitoring
+pb <- progress_bar$new(total = total_groups, format = " Processing [:bar] :percent :elapsed")
+
+# Process data to find first gap split by ball carrier
+splitGap <- SameDirection_TrackData %>%
+  filter(position %in% c("T", "G", "C") | nflId == ballCarrierId) %>%
+  group_by(gamePlayId) %>%
+  arrange(frameId) %>%
+  do({
+    pb$tick() # Update progress bar
+    with(., {
+      ball_carrier_positions <- filter(., nflId == ballCarrierId)
+      if (nrow(ball_carrier_positions) > 2) {
+        for (i in 2:nrow(ball_carrier_positions)) {
+          start_pos <- ball_carrier_positions[i - 1, ]
+          end_pos <- ball_carrier_positions[i, ]
+          current_frameId <- end_pos$frameId
+          other_players <- filter(., nflId != ballCarrierId & frameId == current_frameId)
+          
+          # Check for intersection and return result with frameId
+          if (nrow(other_players) > 1) {
+            result <- check_intersection(current_frameId, start_pos$x, start_pos$y, end_pos$x, end_pos$y, other_players)
+            if (result$intersect) {
+              return(data.frame(split_gap = TRUE, x_intersect = result$x, y_intersect = result$y, frameId = result$frameId))
+            }
+          }
+        }
+        return(data.frame(split_gap = FALSE, x_intersect = NA, y_intersect = NA, frameId = NA))
+      } else {
+        return(data.frame(split_gap = FALSE, x_intersect = NA, y_intersect = NA, frameId = NA))
+      }
+    })
+  }) %>%
+  ungroup() %>%
+  # Summarize results across gamePlayIds
+  group_by(gamePlayId) %>%
+  summarise(split_gap = any(split_gap), x_intersect = first(x_intersect), y_intersect = first(y_intersect), frameId_intersect = first(frameId), .groups = "drop")
+
+```
+
+```{r}
+SameDirection_TrackData <- merge(SameDirection_TrackData, splitGap, 
+                                 by = "gamePlayId")
+```
+
+```{r}
+# Just the first of tackle, first_contact, touchdown, or out of bounds that occurs
+triangle_end_point <- SameDirection_TrackData %>%
+  filter(nflId == ballCarrierId) %>%
+  group_by(gamePlayId) %>%
+  filter(event %in% c("tackle", "first_contact", "touchdown", "out_of_bounds") | 
+           frameId == frameId_intersect) %>%
+  filter(frameId == min(frameId)) %>%
+  reframe(
+    end_x = x,
+    end_y = y,
+    end_frameId = frameId,
+    gamePlayId = gamePlayId
+  )
+```
+
+```{r}
+# Merge back to the data
+SameDirection_TrackData <- merge(SameDirection_TrackData, triangle_end_point, 
+                                 by = "gamePlayId")
+```
+
+Angle of greatest change point
+
+```{r}
+# Function to calculate the angle of change, angle F
+find.angle.f <- function(x_s, y_s, x_e, y_e, x_f, y_f) {
+  # Convert input values to numeric
+  x_s <- as.numeric(x_s)
+  y_s <- as.numeric(y_s)
+  x_e <- as.numeric(x_e)
+  y_e <- as.numeric(y_e)
+  x_f <- as.numeric(x_f)
+  y_f <- as.numeric(y_f)
+
+  # Calculate the angle FSE in radians
+  fse_rad <- atan2(y_e - y_f, x_e - x_f)
+
+  # Convert the angle from radians to degrees
+  fse_deg <- fse_rad * (180 / pi)
+
+  # Calculate the angle at vertex F (angle EF and FS)
+  f_deg <- 180 - fse_deg
+
+  return(f_deg)
+}
+```
+
+```{r}
+# For each frame, calculate mean coordinates of surrounding frames and use them to calculate angles
+SameDirection_TrackData <- SameDirection_TrackData %>%
+  filter(nflId == ballCarrierId) %>%
+  group_by(gamePlayId) %>%
+  arrange(gamePlayId, frameId) %>%
+  mutate(
+    mean_cur_x = rowMeans(cbind(lag(x, 1, default = NA), x, lead(x, 1, default = NA)), na.rm = TRUE),
+    mean_cur_y = rowMeans(cbind(lag(y, 1, default = NA), y, lead(y, 1, default = NA)), na.rm = TRUE),
+    mean_prev_x = rowMeans(cbind(lag(x, 2, default = NA), lag(x, 3, default = NA), lag(x, 4, default = NA)), na.rm = TRUE),
+    mean_prev_y = rowMeans(cbind(lag(y, 2, default = NA), lag(y, 3, default = NA), lag(y, 4, default = NA)), na.rm = TRUE),
+    mean_next_x = rowMeans(cbind(lead(x, 2, default = NA), lead(x, 3, default = NA), lead(x, 4, default = NA)), na.rm = TRUE),
+    mean_next_y = rowMeans(cbind(lead(y, 2, default = NA), lead(y, 3, default = NA), lead(y, 4, default = NA)), na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# Calculate the angle for each frame using mean coordinates
+SameDirection_TrackData <- SameDirection_TrackData %>%
+  rowwise() %>%
+  mutate(
+    angle = find.angle.f(mean_prev_x, mean_prev_y, mean_next_x, mean_next_y, mean_cur_x, mean_cur_y),
+    angle = ifelse(playSide == "left", 360 - angle, angle),
+    angle_diff_from_180 = abs(180 - angle)
+  ) %>%
+  ungroup()
+
+# Find the frame with the greatest change in direction and the corresponding angle
+max_angle_change <- SameDirection_TrackData %>%
+  group_by(gamePlayId) %>%
+  filter(frameId > start_frameId + 5 & frameId < end_frameId - 5) %>%
+  filter(angle_diff_from_180 == max(angle_diff_from_180, na.rm = TRUE)) %>%
+  reframe(playSide,
+    angle_at_max_diff = first(angle),
+    frameId_at_max_diff = first(frameId)
+  ) %>%
+  distinct(gamePlayId, playSide, angle_at_max_diff, frameId_at_max_diff)
+```
+
+```{r}
+SameDirection_TrackData <- merge(SameDirection_TrackData, max_angle_change %>% select(-playSide), by = "gamePlayId")
+```
+
+Where the greatest change in direction occurs, calculate that angle with the 
+end point
+
+```{r}
+full_angle <- SameDirection_TrackData %>%
+  filter(nflId == ballCarrierId) %>%
+  filter(frameId == frameId_at_max_diff) %>%
+  mutate(
+    angle_greatestChange = find.angle.f(start_x, start_y, end_x, end_y, x, y),
+    angle_greatestChange = ifelse(playSide == "left", 360 - angle_greatestChange, angle_greatestChange)
+  )
+```
+
+# Save resulting data as processed_data.csv
+
+```{r}
+# Save dataframe as CSV
+write.csv(SameDirection_TrackData, 
+          file = "data/wk1_processed_data.csv", row.names = FALSE)
+```
+
