@@ -378,7 +378,7 @@ wk2_track_data <- wk2_track_data %>%
 # Find the frame with the greatest change in direction and the corresponding angle
 max_angle_change <- wk2_track_data %>%
   group_by(gamePlayId) %>%
-  filter(frameId > start_frameId & frameId < end_frameId) %>%
+  filter(frameId > start_frameId + 5 & frameId < end_frameId - 5) %>%
   filter(angle_diff_from_180 == max(angle_diff_from_180, na.rm = TRUE)) %>%
   reframe(playSide,
     angle_at_max_diff = first(angle),
@@ -432,11 +432,19 @@ full_angle <- wk2_track_data %>%
 ```{r}
 ggplot(full_angle, aes(x = angle_greatestChange)) +
    geom_histogram() +
-facet_wrap(~playSide)
+facet_wrap(~playSide) +
+  geom_vline(xintercept = 180, linetype = "dashed")
 
-ggplot(full_angle %>% filter(expectedPointsAdded != min(expectedPointsAdded)), aes(x = angle_at_max_diff, y = expectedPointsAdded)) +
+ggplot(full_angle, aes(x = angle_at_max_diff, y = expectedPointsAdded)) +
   geom_point() +
-  geom_smooth()
+  facet_wrap(~playSide) +
+  geom_smooth() +
+  geom_vline(xintercept = 180, linetype = "dashed")
+
+ggplot(full_angle %>% filter(expectedPointsAdded != min(expectedPointsAdded)), aes(x = frameId_at_max_diff - start_frameId)) +
+  geom_histogram() +
+  facet_wrap(~playSide) 
+
 ```
 
 # Save the data
