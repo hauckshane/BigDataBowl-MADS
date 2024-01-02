@@ -662,6 +662,8 @@ SameDirection_TrackData %>%
   filter(ifelse())
 ```
 
+##### Stopped moving from triangles here
+
 # Save resulting data as processed_data.csv
 
 ```{r}
