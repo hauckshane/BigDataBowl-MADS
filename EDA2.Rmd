@@ -401,14 +401,28 @@ splitdata <- splitdata %>% group_by(GameEventID) %>%
 
 
 ```{r}
-test_run <- designed_runs %>% filter(gameId == 2022091811, playId == 3428)
+test_run <- designed_runs %>% filter(gameId == 2022091500, playId == 1983)
 nfl_field(c(0, 120)) +
   geom_point(
-    data = test_run, aes(x = x, y = y, color = club),
+    data = test_run %>% filter(frameId >= 18 & frameId <= 37), aes(x = x, y = y, color = club),
     show.legend = FALSE,
     size = 2
   ) +
-  #geom_point(data = test_run %>% filter(nflId == 47874), aes(x = x, y = y), color = "black") +
+  geom_point(data = test_run %>% filter(nflId == 46144), aes(x = x, y = y), color = "black") +
+  geom_point(data = test_run %>% filter(nflId == 52585), aes(x = x, y = y), color = "black") +
   transition_time(frameId) +
   scale_color_manual(values = c("purple", "yellow", "white"))
 ```
+
+
+```{r}
+nfl_field(c(0, 120)) +
+  geom_point(
+    data = test_run %>% filter(frameId >= 18 & frameId <= 37), aes(x = x, y = y, color = club),
+    show.legend = FALSE,
+    size = 2
+  ) +
+  geom_point(data = test_run %>% filter(nflId == 46144), aes(x = x, y = y), color = "black") +
+  geom_point(data = test_run %>% filter(nflId == 52585), aes(x = x, y = y), color = "black")
+```
+
