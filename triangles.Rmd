@@ -149,7 +149,7 @@ check_intersection <- function(frameId, ballCarrierStartX, ballCarrierStartY, ba
     player2 <- players_df[pair[2], ]
 
     # Check adjacency based on y-coordinate rank
-    if (abs(player1$rank - player2$rank) == 1) {
+    if (abs(player1$rank - player2$rank) == 1 | abs(player1$rank - player2$rank) == 2) {
       result <- is_line_segment_intersect(
         ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY,
         player1$x, player1$y, player2$x, player2$y
@@ -539,9 +539,9 @@ EIR <- ballcarrier_edgedefenders %>%
 
 ```{r}
 ggplot(EIR,
-       aes(x = edge_intensity_percentage)) +
+       aes(x = edge_intensity_rating)) +
   geom_histogram() +
-  labs(title = "Distribution of Edge Intensity Percentage", x = "Edge Intensity Percentage", y = "Count")
+  labs(title = "Distribution of Edge Intensity Rating", x = "Edge Intensity Rating", y = "Count")
 
 ```
 
@@ -558,18 +558,31 @@ nfl_field(c(0, 120)) +
     show.legend = FALSE,
     size = 2
   ) +
-  geom_point(data = test_run %>% filter(!is.na(edge_intensity_rating)), aes(x = x, y = y), color = "black") +
+  geom_point(data = test_run %>% filter(position %in% c("G","T", "C")), aes(x = x, y = y), color = "black", size = 2) +
+  #geom_point(data = test_run %>% filter(!is.na(edge_intensity_rating)), aes(x = x, y = y), color = "black") +
   transition_time(frameId) +
   scale_color_manual(values = c("purple", "yellow", "white"))
 ```
 
 ```{r}
 wk2_track_data %>% 
-  ggplot(aes(x = edge_intensity_rating, y = angle_diff_from_180)) +
+  ggplot(aes(x = edge_intensity_rating, y = expectedPointsAdded)) +
   geom_point(alpha = 0.1) +
   geom_smooth() +
   labs(title = "Edge Intensity Rating vs. Angle Difference from 180", x = "Edge Intensity Rating", y = "Angle Difference from 180")
 ```
+
+
+# Modeling EIR
+
+```{r}
+wk2_track_data %>% filter(!is.na(edge_intensity_rating)) %>%
+  select(gamePlayId, frameId, nflId) %>%
+  group_by(gamePlayId, frameId) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+```
+
 
 
 
