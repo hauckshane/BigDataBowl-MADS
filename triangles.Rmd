@@ -319,16 +319,35 @@ angls <- wk2_track_data %>%
     
     # Angle adjusting for cutbacks or bounces (greater than 0 bounce, 360 or less cutback)
     relative_angle = ifelse((playSide == "left" & lead(y, 1, default = NA) < y) |
-                              (playSide == "right" & lead(y, 1, default = NA) > y), (0 - angle) %% 360, angle)
+                              (playSide == "right" & lead(y, 1, default = NA) > y), (0 - angle) %% 360, angle),
+    
+    relative_angle_change = case_when(
+      playSide == "left" & lead(y, 1, default = NA) < y ~ -smallest_angle_diff(relative_angle, lag(relative_angle, 1, default = NA)),
+      playSide == "right" & lead(y, 1, default = NA) > y ~ -smallest_angle_diff(relative_angle, lag(relative_angle, 1, default = NA)),
+      TRUE ~ smallest_angle_diff(relative_angle, lag(relative_angle, 1, default = NA))
+    ),
+    
+    relative_orientation = ifelse(playSide == "left", (o + 180) %% 360,o),
+    relative_orientation_change = smallest_angle_diff(relative_orientation, lag(relative_orientation, 1, default = NA)),
+    relative_total_change = if_else(relative_orientation <= 360 & relative_orientation > 180, 
+                                    relative_angle_change - relative_orientation_change,
+                                    relative_angle_change + relative_orientation_change)
   ) %>%
   ungroup() %>% na.omit() %>%
   # Deal with extremely large orientation changes
   # If orientation change huge, just use angle change
   # Calculate the 99th percentile of angle_change
-  mutate(orientation_change_99th = quantile(orientation_change, 0.99, na.rm = TRUE)) %>%
+  mutate(orientation_change_99th = quantile(orientation_change, 0.99, na.rm = TRUE),
+         relative_orientation_change_99th = quantile(abs(relative_orientation_change), .99, na.rm = TRUE)) %>%
   mutate(
-    total_change = ifelse(orientation_change > orientation_change_99th, angle_change + orientation_change_99th, total_change)
-  ) %>%
+    total_change = ifelse(orientation_change > orientation_change_99th, angle_change + orientation_change_99th, total_change),
+    relative_total_change = case_when(abs(relative_orientation_change) > relative_orientation_change_99th &
+                                        relative_orientation <= 360 & 
+                                        relative_orientation > 180 ~ relative_angle_change - relative_orientation_change_99th,
+                                      abs(relative_orientation_change) > relative_orientation_change_99th &
+                                        relative_orientation <= 180 &
+                                        relative_orientation > 0 ~ relative_angle_change + relative_orientation_change_99th,
+                                      TRUE ~ relative_total_change)) %>%
   select(-orientation_change_99th)
 
 # correlation of angle change and orientation change
@@ -550,30 +569,8 @@ wk2_track_data <- full_join(wk2_track_data, EIR, by = c("gamePlayId", "frameId",
 
 ```
 
-```{r}
-test_run <- wk2_track_data %>% filter(gameId == 2022091900, playId == 3980)
-nfl_field(c(0, 120)) +
-  geom_point(
-    data = test_run, aes(x = x, y = y, color = club),
-    show.legend = FALSE,
-    size = 2
-  ) +
-  #geom_point(data = test_run %>% filter(position %in% c("G","T", "C")), aes(x = x, y = y), color = "black", size = 2) +
-  geom_point(data = test_run %>% filter(!is.na(edge_intensity_rating)), aes(x = x, y = y), color = "black") +
-  transition_time(frameId) +
-  scale_color_manual(values = c("purple", "yellow", "white"))
-```
-
-```{r}
-wk2_track_data %>% 
-  ggplot(aes(x = edge_intensity_rating, y = expectedPointsAdded)) +
-  geom_point(alpha = 0.1) +
-  geom_smooth() +
-  labs(title = "Edge Intensity Rating vs. Angle Difference from 180", x = "Edge Intensity Rating", y = "Angle Difference from 180")
-```
 
 
-# Modeling EIR
 
 ```{r}
 wk2_track_data %>% filter(!is.na(edge_intensity_rating)) %>%
@@ -598,7 +595,31 @@ team_EIRs <- wk2_track_data %>% filter(!is.na(edge_intensity_rating)) %>%
 wk2_track_data <- full_join(wk2_track_data, team_EIRs, by = c("gamePlayId", "frameId", "nflId"))
 ```
 
+```{r}
+test_run <- wk2_track_data %>% filter(gameId == 2022091900, playId == 3980)
+nfl_field(c(0, 120)) +
+  geom_point(
+    data = test_run, aes(x = x, y = y, color = club),
+    show.legend = FALSE,
+    size = 2
+  ) +
+  #geom_point(data = test_run %>% filter(position %in% c("G","T", "C")), aes(x = x, y = y), color = "black", size = 2) +
+  geom_point(data = test_run %>% filter(!is.na(edge_intensity_rating)), aes(x = x, y = y), color = "black") +
+  transition_time(frameId) +
+  scale_color_manual(values = c("purple", "yellow", "white"))
+```
 
+```{r}
+wk2_track_data %>% 
+  filter(frameId == frameId_at_max_change) %>%
+  filter(total_change_at_max_change < 50) %>%
+  ggplot(aes(x = team_EIR, y = relative_angle)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth() +
+  labs(title = "Edge Intensity Rating vs. Angle Difference from 180", x = "Edge Intensity Rating", y = "Angle Difference from 180") +
+  coord_polar() +
+  facet_wrap(~playSide)
+```
 
 # Save the data
 Saving the data as wk2_triangles.csv
