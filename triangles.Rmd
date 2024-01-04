@@ -596,28 +596,61 @@ wk2_track_data <- full_join(wk2_track_data, team_EIRs, by = c("gamePlayId", "fra
 ```
 
 ```{r}
-test_run <- wk2_track_data %>% filter(gameId == 2022091900, playId == 3980)
-nfl_field(c(0, 120)) +
+animation_data <- wk2_track_data %>% 
+  filter(total_change_at_max_change < 30) %>%
+  mutate(normalize_total_change = (total_change - min(total_change, na.rm = TRUE)) / (max(total_change, na.rm = TRUE) - min(total_change, na.rm = TRUE))) %>%
+  mutate(normalize_team_EIR = (team_EIR - min(team_EIR, na.rm = TRUE)) / (max(team_EIR, na.rm = TRUE) - min(team_EIR, na.rm = TRUE))) 
+```
+
+
+
+```{r}
+test_run <- animation_data %>% filter(gameId == 2022091500, playId == 1983)
+edge_players <- test_run %>% filter(!is.na(edge_intensity_rating))
+p1 <- nfl_field(c(50, 120)) +
   geom_point(
     data = test_run, aes(x = x, y = y, color = club),
     show.legend = FALSE,
     size = 2
   ) +
   #geom_point(data = test_run %>% filter(position %in% c("G","T", "C")), aes(x = x, y = y), color = "black", size = 2) +
-  geom_point(data = test_run %>% filter(!is.na(edge_intensity_rating)), aes(x = x, y = y), color = "black") +
+  geom_point(data = edge_players, aes(x = x, y = y), color = "black", size = 2 + (edge_players$edge_intensity_rating / 100)*2) +
   transition_time(frameId) +
-  scale_color_manual(values = c("purple", "yellow", "white"))
+  scale_color_manual(values = c("firebrick2", "white", "blue"))
 
 testing_run <- test_run %>% group_by(frameId)  %>%
-  distinct(frameId, team_EIR, total_change) %>% filter(team_EIR == max(team_EIR, na.rm = TRUE)) %>%
-  mutate(normalize_total_change = (total_change - min(total_change, na.rm = TRUE)) / (max(total_change, na.rm = TRUE) - min(total_change, na.rm = TRUE)))
+  distinct(frameId, normalize_team_EIR, normalize_total_change) 
 
-ggplot(testing_run, 
-       aes(x = frameId, y = team_EIR)) +
-  geom_line() +
-  geom_line(aes(x = frameId, y = total_change), color = "red") +
+p2 <- ggplot(testing_run, aes(x = frameId)) +
+  geom_line(aes(y = normalize_team_EIR, color = "Team EIR"), linewidth = 2) +
+  geom_line(aes(y = normalize_total_change, color = "Total Change"), linewidth = 2) +
   transition_reveal(frameId) +
-  scale_x_continuous(breaks = seq(1, 66, 1))
+  geom_vline(xintercept = test_run$frameId_at_max_change, color = "black", linetype = "dashed") +
+  scale_x_continuous(breaks = seq(19, 37, 1), limits = c(19, 37)) +
+  scale_color_manual(values = c("Team EIR" = "purple", "Total Change" = "orange")) +
+  labs(title = "Edge Intensity Rating vs. Total Change in Direction at each Frame",
+       x = "Frame ID", y = "Normalized Value", color = "Legend Title") +
+  # Remove grid lines
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank()
+  )
+  
+
+anim_save("animation1.gif", p1)
+anim_save("animation2.gif", p2)
+
+library(magick)
+
+gif1 <- image_read("animation1.gif")
+gif2 <- image_read("animation2.gif")
+
+combined_gif <- image_append(c(gif1, gif2), stack = FALSE)
+image_write(combined_gif, "combined_animation.gif")
+```
+
+```{r}
 ```
 
 ```{r}
@@ -664,7 +697,7 @@ ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
   coord_polar(start = 66) +
   scale_x_continuous(limits = c(-180,180)) +
   scale_y_continuous(limits = c(0,1)) +
-  labs(title = "EPA by Relative Angle", x = "Relative Angle", y = " ", subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
+  labs(title = "EPA by Relative Total Change", x = "Relative Total Change", y = " ", subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
        fill = "EPA")  +
   scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA)) +
   theme_minimal() +
@@ -710,8 +743,6 @@ ggplot(plotdf3, aes(x = bucket_angle_mean, y = 1)) +
         strip.text = element_text(size = 18))
 ```
 
-```{r}
-```
 
 ```{r}
 wk2_track_data %>% 
