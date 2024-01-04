@@ -6,7 +6,7 @@ output: html_document
 ---
 
 Combination of EDA2.Rmd and triangles.Rmd
-Run to get triangle/angle of change data for all weeks.
+Run to get triangle/angle of change data for one week.
 
 # Read in libraries
 
@@ -43,7 +43,7 @@ nfl_field <- function(xlims) {
 ```
 
 ```{r}
-tracking_file <- "data/tracking_week_1.csv"
+tracking_file <- "data/tracking_week_9.csv"
 ```
 
 # Initial data cleaning pass
@@ -378,17 +378,23 @@ SameDirection_TrackData %>% distinct(gameId, playId) %>% nrow()
 ```
 
 
-# Calculate the points of the path triangle
-
 Make gamePlayId which is a combination of gameId and playId. This helps us 
 identify each unique play.
-
 ```{r}
-SameDirection_TrackData$gamePlayId <- paste(SameDirection_TrackData$gameId,
-                                            SameDirection_TrackData$playId)
+SameDirection_TrackData$gamePlayId <- paste(SameDirection_TrackData$gameId, SameDirection_TrackData$playId)
 ```
 
-Start
+# FINDING POINTS OF THE TRIANGLE
+
+We want to identify 3 points of the triangle which represents the ballCarrier's
+path.
+
+Save these coordinates in the data. Then, we can calculate the angle of change.
+
+## Start
+(X,Y) of ballCarrier when event == “handoff”
+
+start_x, start_y, start_frameId
 
 ```{r}
 start <- SameDirection_TrackData %>%
@@ -402,11 +408,21 @@ start <- SameDirection_TrackData %>%
     gamePlayId = gamePlayId
   )
 
-SameDirection_TrackData <- merge(SameDirection_TrackData, start, 
-                                 by = "gamePlayId")
+SameDirection_TrackData <- merge(SameDirection_TrackData, start, by = "gamePlayId")
 ```
 
-End 
+## End
+If: event includes “tackle”, (X,Y) of ballCarrier when event == “tackle”
+Else: location where ballCarrier breaks gap point
+Shane’s soccer code: checks every player pairing and sees if ballCarrier line 
+crosses in-between lines
+
+Do when the player breaks gap point first, because they could be tackled 
+after that. Then, if end_x and end_y are NA for that play, check those plays 
+for the tackle events.
+
+end_x, end_y, end_frameId
+
 
 ```{r}
 # Breaks the gap point
@@ -440,10 +456,10 @@ is_line_segment_intersect <- function(x1, y1, x2, y2, x3, y3, x4, y4) {
     if (slope1 != slope2) {
       x_intersect <- (intercept2 - intercept1) / (slope1 - slope2)
       y_intersect <- slope1 * x_intersect + intercept1
-      
+
       # Ensure intersection point lies within both line segments
       if (x_intersect >= min(x1, x2) && x_intersect <= max(x1, x2) &&
-          x_intersect >= min(x3, x4) && x_intersect <= max(x3, x4)) {
+        x_intersect >= min(x3, x4) && x_intersect <= max(x3, x4)) {
         return(list(intersect = TRUE, x = x_intersect, y = y_intersect))
       }
     }
@@ -466,7 +482,7 @@ check_intersection <- function(frameId, ballCarrierStartX, ballCarrierStartY, ba
     player2 <- players_df[pair[2], ]
 
     # Check adjacency based on y-coordinate rank
-    if (abs(player1$rank - player2$rank) == 1) {
+    if (abs(player1$rank - player2$rank) == 1 | abs(player1$rank - player2$rank) == 2) {
       result <- is_line_segment_intersect(
         ballCarrierStartX, ballCarrierStartY, ballCarrierEndX, ballCarrierEndY,
         player1$x, player1$y, player2$x, player2$y
@@ -508,7 +524,7 @@ splitGap <- SameDirection_TrackData %>%
           end_pos <- ball_carrier_positions[i, ]
           current_frameId <- end_pos$frameId
           other_players <- filter(., nflId != ballCarrierId & frameId == current_frameId)
-          
+
           # Check for intersection and return result with frameId
           if (nrow(other_players) > 1) {
             result <- check_intersection(current_frameId, start_pos$x, start_pos$y, end_pos$x, end_pos$y, other_players)
@@ -527,21 +543,20 @@ splitGap <- SameDirection_TrackData %>%
   # Summarize results across gamePlayIds
   group_by(gamePlayId) %>%
   summarise(split_gap = any(split_gap), x_intersect = first(x_intersect), y_intersect = first(y_intersect), frameId_intersect = first(frameId), .groups = "drop")
-
 ```
 
 ```{r}
-SameDirection_TrackData <- merge(SameDirection_TrackData, splitGap, 
-                                 by = "gamePlayId")
+SameDirection_TrackData <- merge(SameDirection_TrackData, splitGap, by = "gamePlayId")
 ```
+
 
 ```{r}
 # Just the first of tackle, first_contact, touchdown, or out of bounds that occurs
 triangle_end_point <- SameDirection_TrackData %>%
   filter(nflId == ballCarrierId) %>%
   group_by(gamePlayId) %>%
-  filter(event %in% c("tackle", "first_contact", "touchdown", "out_of_bounds") | 
-           frameId == frameId_intersect) %>%
+  filter(event %in% c("tackle", "first_contact", "touchdown", "out_of_bounds") |
+    frameId == frameId_intersect) %>%
   filter(frameId == min(frameId)) %>%
   reframe(
     end_x = x,
@@ -551,13 +566,23 @@ triangle_end_point <- SameDirection_TrackData %>%
   )
 ```
 
+
 ```{r}
 # Merge back to the data
-SameDirection_TrackData <- merge(SameDirection_TrackData, triangle_end_point, 
-                                 by = "gamePlayId")
+SameDirection_TrackData <- merge(SameDirection_TrackData, triangle_end_point, by = "gamePlayId")
 ```
 
-Angle of greatest change point
+
+
+# Find angle of change
+The angle we want is the inside angle.
+If we have vertices F, S, and E (change frame, start, end) we want angle F, 
+which is made from line segments EF and FS.
+
+1. angle FSE = arctan((end_y - changeFrame_y)/ (end_x - changeFrame_y))
+2. angle F = 180 - angle FSE
+
+Radians to degree conversion: degree = radians * (180/pi)
 
 ```{r}
 # Function to calculate the angle of change, angle F
@@ -570,97 +595,117 @@ find.angle.f <- function(x_s, y_s, x_e, y_e, x_f, y_f) {
   x_f <- as.numeric(x_f)
   y_f <- as.numeric(y_f)
 
-  # Calculate the angle FSE in radians
-  fse_rad <- atan2(y_e - y_f, x_e - x_f)
+  # Calculate vectors FS and FE
+  fs_x <- x_s - x_f
+  fs_y <- y_s - y_f
+  fe_x <- x_e - x_f
+  fe_y <- y_e - y_f
+
+  # Calculate the angle between vectors FS and FE in radians
+  dot_product <- fs_x * fe_x + fs_y * fe_y
+  magnitude_fs <- sqrt(fs_x^2 + fs_y^2)
+  magnitude_fe <- sqrt(fe_x^2 + fe_y^2)
+  angle_rad <- acos(dot_product / (magnitude_fs * magnitude_fe))
 
   # Convert the angle from radians to degrees
-  fse_deg <- fse_rad * (180 / pi)
+  angle_deg <- angle_rad * (180 / pi)
 
-  # Calculate the angle at vertex F (angle EF and FS)
-  f_deg <- 180 - fse_deg
+  # Normalize the angle to the range [0, 360)
+  angle_deg_normalized <- 180 - (angle_deg) %% 360
 
-  return(f_deg)
+  return(angle_deg_normalized)
+}
+
+```
+
+```{r}
+# Function that calculates the smallest difference between two angles, correctly handling the wrap-around at 360 degrees.
+smallest_angle_diff <- function(angle1, angle2) {
+  diff <- abs(angle1 - angle2)
+  ifelse(diff > 180, 360 - diff, diff)
 }
 ```
 
+
+# Finding the greatest change in direction
+
 ```{r}
-# For each frame, calculate mean coordinates of surrounding frames and use them to calculate angles
-SameDirection_TrackData <- SameDirection_TrackData %>%
+angls <- SameDirection_TrackData %>%
+  filter(frameId >= start_frameId & frameId <= end_frameId) %>%
   filter(nflId == ballCarrierId) %>%
   group_by(gamePlayId) %>%
   arrange(gamePlayId, frameId) %>%
-  mutate(
-    mean_cur_x = rowMeans(cbind(lag(x, 1, default = NA), x, lead(x, 1, default = NA)), na.rm = TRUE),
-    mean_cur_y = rowMeans(cbind(lag(y, 1, default = NA), y, lead(y, 1, default = NA)), na.rm = TRUE),
-    mean_prev_x = rowMeans(cbind(lag(x, 2, default = NA), lag(x, 3, default = NA), lag(x, 4, default = NA)), na.rm = TRUE),
-    mean_prev_y = rowMeans(cbind(lag(y, 2, default = NA), lag(y, 3, default = NA), lag(y, 4, default = NA)), na.rm = TRUE),
-    mean_next_x = rowMeans(cbind(lead(x, 2, default = NA), lead(x, 3, default = NA), lead(x, 4, default = NA)), na.rm = TRUE),
-    mean_next_y = rowMeans(cbind(lead(y, 2, default = NA), lead(y, 3, default = NA), lead(y, 4, default = NA)), na.rm = TRUE)
-  ) %>%
-  ungroup()
+  reframe(gamePlayId, frameId,
+    # Calculate the angle using the find.angle.f function
+    angle = find.angle.f(lag(x, 1, default = NA), lag(y, 1, default = NA), 
+                         lead(x, 1, default = NA), lead(y, 1, default = NA), 
+                         x, y),
 
-# Calculate the angle for each frame using mean coordinates
-SameDirection_TrackData <- SameDirection_TrackData %>%
-  rowwise() %>%
-  mutate(
-    angle = find.angle.f(mean_prev_x, mean_prev_y, mean_next_x, mean_next_y, mean_cur_x, mean_cur_y),
-    angle = ifelse(playSide == "left", 360 - angle, angle),
-    angle_diff_from_180 = abs(180 - angle)
+    # Calculate the absolute change in angle between frames
+    angle_change = abs(angle - lag(angle, 1, default = NA)),
+
+    # Calculate the absolute change in orientation between frames
+    orientation_change = smallest_angle_diff(o, lag(o, 1, default = NA)),
+
+    # Create a composite measure of change
+    total_change = angle_change + orientation_change,
+    
+    # Angle adjusting for cutbacks or bounces (greater than 0 bounce, 360 or less cutback)
+    relative_angle = ifelse((playSide == "left" & lead(y, 1, default = NA) < y) |
+                              (playSide == "right" & lead(y, 1, default = NA) > y), (0 - angle) %% 360, angle)
   ) %>%
-  ungroup()
+  ungroup() %>% na.omit() %>%
+  # Deal with extremely large orientation changes
+  # If orientation change huge, just use angle change
+  # Calculate the 99th percentile of angle_change
+  mutate(orientation_change_99th = quantile(orientation_change, 0.99, na.rm = TRUE)) %>%
+  mutate(
+    total_change = ifelse(orientation_change > orientation_change_99th, angle_change + orientation_change_99th, total_change)
+  ) %>%
+  select(-orientation_change_99th)
+
+# correlation of angle change and orientation change
+angls %>% select(angle_change, orientation_change) %>% cor()
 
 # Find the frame with the greatest change in direction and the corresponding angle
-max_angle_change <- SameDirection_TrackData %>%
+max_angle_change <- angls %>%
   group_by(gamePlayId) %>%
-  filter(frameId > start_frameId + 5 & frameId < end_frameId - 5) %>%
-  filter(angle_diff_from_180 == max(angle_diff_from_180, na.rm = TRUE)) %>%
-  reframe(playSide,
-    angle_at_max_diff = first(angle),
-    frameId_at_max_diff = first(frameId)
+  filter(total_change == max(total_change, na.rm = TRUE)) %>%
+  mutate(
+    angle_change_at_max_change = angle_change,
+    orientation_change_at_max_change = orientation_change,
+    total_change_at_max_change = total_change,
+    angle_at_max_change = first(angle),
+    relative_angle_at_max_change = first(relative_angle),
+    frameId_at_max_change = first(frameId)
   ) %>%
-  distinct(gamePlayId, playSide, angle_at_max_diff, frameId_at_max_diff)
+  distinct(gamePlayId, frameId_at_max_change, angle_change_at_max_change, orientation_change_at_max_change, total_change_at_max_change, total_change_at_max_change, angle_at_max_change, relative_angle_at_max_change)
+
+max_angle_change %>% ungroup() %>% select(angle_change_at_max_change, orientation_change_at_max_change) %>% cor()
 ```
 
 ```{r}
-SameDirection_TrackData <- merge(SameDirection_TrackData, max_angle_change %>% select(-playSide), by = "gamePlayId")
+SameDirection_TrackData <- full_join(SameDirection_TrackData, angls, by = c("gamePlayId", "frameId"))
+SameDirection_TrackData <- full_join(SameDirection_TrackData, max_angle_change, by = "gamePlayId")
 ```
 
-Where the greatest change in direction occurs, calculate that angle with the 
-end point
+
+
+# Where the greatest change in direction occurs calculate that angle with the end point
 
 ```{r}
 full_angle <- SameDirection_TrackData %>%
   filter(nflId == ballCarrierId) %>%
-  filter(frameId == frameId_at_max_diff) %>%
+  filter(frameId == frameId_at_max_change) %>%
   mutate(
-    angle_greatestChange = find.angle.f(start_x, start_y, end_x, end_y, x, y),
-    angle_greatestChange = ifelse(playSide == "left", 360 - angle_greatestChange, angle_greatestChange)
+    angle_greatestChange = find.angle.f(start_x, start_y, end_x, end_y, x, y)
   )
 ```
 
 ```{r}
-SameDirection_TrackData <- merge(SameDirection_TrackData, full_angle 
-                                 %>% select(gamePlayId, angle_greatestChange), 
-                                 by = "gamePlayId")
+SameDirection_TrackData <- merge(SameDirection_TrackData, full_angle %>% select(gamePlayId, angle_greatestChange), by = "gamePlayId")
 ```
 
-# Find player who is setting the edge at a given time
-
-For playside left:
-Player who is closest to ball carrier with a larger y coordinate at 
-greatest rate of change.
-For playside right:
-Player who is closest to ball carrier with a smaller y coordinate at 
-greatest rate of change.
-
-```{r eval=FALSE, include=FALSE}
-SameDirection_TrackData %>%
-  group_by(gamePlayId, frameId) %>%
-  filter(club != possessionTeam) %>%
-  # calculate player distance from ball carrier
-  mutate(distance_from_ballCarrier = sqrt((x - ballCarrier_x)^2 + (y - ballCarrier_y)^2)) %>%
-  filter(ifelse())
-```
 
 ##### Stopped moving from triangles here
 
@@ -669,6 +714,6 @@ SameDirection_TrackData %>%
 ```{r}
 # Save dataframe as CSV
 write.csv(SameDirection_TrackData, 
-          file = "data/wk1_processed_data.csv", row.names = FALSE)
+          file = "data/wk9_processed_data.csv", row.names = FALSE)
 ```
 

@@ -1,0 +1,68 @@
+---
+title: "Graphs"
+author: "Shane Hauck, Marion Haney, Devin Basley, Vinay Maruri"
+date: "2024-1-3"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(gganimate)
+theme_set(theme_bw())
+```
+
+Read in processed data files and combine:
+```{r}
+file_pattern <- "^wk[123456789]_processed_data\\.csv$"
+files <- list.files(path = "data", pattern = file_pattern, full.names = TRUE)
+combined_data <- map_df(files, read.csv)
+
+data <- filter(combined_data, frameId == frameId_at_max_change)
+data <- filter(data, nflId == ballCarrierId)
+```
+
+
+Histogram of total change (angle change + orientation change)
+```{r}
+ggplot(data = data, aes(x = total_change)) +
+  geom_histogram()
+```
+
+
+Filter the data: total change < 30 (where most of the data are)
+```{r}
+max_range <- 30
+filtered_data <- filter(data, total_change < max_range)
+```
+
+
+Histogram of total change (angle change + orientation change) for each bucket
+```{r}
+ggplot(data = filtered_data, aes(x = total_change)) +
+  geom_histogram() +
+  facet_wrap(~factor(bucket))
+```
+
+
+Create buckets
+```{r}
+bucket_size <- 5
+filtered_data$bucket <- cut(filtered_data$total_change, breaks = seq(0, max_range, bucket_size), 
+                                            labels = FALSE, right = FALSE)
+```
+
+Get EPA by bucket
+```{r}
+avg_epa_by_bucket <- filtered_data %>%
+  group_by(bucket) %>%
+  reframe(epa = mean(expectedPointsAdded),
+            min_change = (bucket - 1) * bucket_size,
+            max_change = bucket * bucket_size) %>%
+  unique()
+```
+
+
+
+
+
