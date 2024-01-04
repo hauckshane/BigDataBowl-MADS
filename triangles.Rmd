@@ -607,19 +607,40 @@ nfl_field(c(0, 120)) +
   geom_point(data = test_run %>% filter(!is.na(edge_intensity_rating)), aes(x = x, y = y), color = "black") +
   transition_time(frameId) +
   scale_color_manual(values = c("purple", "yellow", "white"))
+
+testing_run <- test_run %>% group_by(frameId)  %>%
+  distinct(frameId, team_EIR, total_change) %>% filter(team_EIR == max(team_EIR, na.rm = TRUE)) %>%
+  mutate(normalize_total_change = (total_change - min(total_change, na.rm = TRUE)) / (max(total_change, na.rm = TRUE) - min(total_change, na.rm = TRUE)))
+
+ggplot(testing_run, 
+       aes(x = frameId, y = team_EIR)) +
+  geom_line() +
+  geom_line(aes(x = frameId, y = total_change), color = "red") +
+  transition_reveal(frameId) +
+  scale_x_continuous(breaks = seq(1, 66, 1))
 ```
 
 ```{r}
 wk2_track_data %>% 
   filter(frameId == frameId_at_max_change) %>%
   filter(total_change_at_max_change < 50) %>%
-  ggplot(aes(x = team_EIR, y = relative_angle)) +
-  geom_point(alpha = 0.1) +
-  geom_smooth() +
+  ggplot(aes(y = relative_angle, x = relative_angle)) +
+  geom_point(alpha = 0.01) +
   labs(title = "Edge Intensity Rating vs. Angle Difference from 180", x = "Edge Intensity Rating", y = "Angle Difference from 180") +
   coord_polar() +
   facet_wrap(~playSide)
 ```
+
+```{r}
+wk2_track_data %>% 
+  filter(frameId == frameId_at_max_change) %>%
+  filter(nflId == ballCarrierId) %>%
+  filter(total_change_at_max_change < 50) %>%
+  ggplot(aes(x = relative_angle, color = expectedPointsAdded)) +
+  geom_col() +
+  facet_wrap(~playSide)
+```
+
 
 # Save the data
 Saving the data as wk2_triangles.csv
