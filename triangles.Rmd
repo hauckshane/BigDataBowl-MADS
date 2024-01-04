@@ -240,54 +240,6 @@ wk2_track_data <- merge(wk2_track_data, triangle_end_point, by = "gamePlayId")
 ```
 
 
-## Furthest
-If ball carrier didn't split a gap do between start_frameID and frame before first contact. 
-If ball carrier split a gap do between start_frameID and frameId_intersect.
-Them take max of the absolute value of:
-1. Start Y - max Y
-2. Start Y - min Y
-
-furthest_x, furthest_y, furthest_frameId
-
-```{r}
-# Figure out furthest y coordinate (max of either direction)
-furthest_y <- wk2_track_data %>%
-  group_by(gamePlayId) %>%
-  filter(nflId == ballCarrierId) %>%
-  filter(frameId > start_frameId & frameId < end_frameId) %>%
-  reframe(
-    max_y = max(y),
-    min_y = min(y),
-    start_y = start_y,
-    abs_max_y = abs(start_y - max_y),
-    abs_min_y = abs(start_y - min_y),
-    furthest_y = ifelse(abs_max_y >= abs_min_y, max_y, min_y),
-    x = x,
-    y = y,
-    frameId = frameId
-  )
-```
-
-```{r}
-# Grab the x coordinate and frame id where we see furthest_y
-furthest <- furthest_y %>%
-  group_by(gamePlayId) %>%
-  filter(y == furthest_y) %>%
-  reframe(
-    furthest_x = x,
-    furthest_y = y,
-    furthest_frameId = frameId,
-    gamePlayId = gamePlayId
-  ) %>%
-  group_by(gamePlayId) %>%
-  filter(furthest_frameId == min(furthest_frameId))
-```
-
-```{r}
-# Merge back to the data
-wk2_track_data <- merge(wk2_track_data, furthest, by = "gamePlayId")
-```
-
 
 # Find angle of change
 The angle we want is the inside angle at the furthest point.
@@ -310,123 +262,125 @@ find.angle.f <- function(x_s, y_s, x_e, y_e, x_f, y_f) {
   x_f <- as.numeric(x_f)
   y_f <- as.numeric(y_f)
 
-  # Calculate the angle FSE in radians
-  fse_rad <- atan2(y_e - y_f, x_e - x_f)
+  # Calculate vectors FS and FE
+  fs_x <- x_s - x_f
+  fs_y <- y_s - y_f
+  fe_x <- x_e - x_f
+  fe_y <- y_e - y_f
+
+  # Calculate the angle between vectors FS and FE in radians
+  dot_product <- fs_x * fe_x + fs_y * fe_y
+  magnitude_fs <- sqrt(fs_x^2 + fs_y^2)
+  magnitude_fe <- sqrt(fe_x^2 + fe_y^2)
+  angle_rad <- acos(dot_product / (magnitude_fs * magnitude_fe))
 
   # Convert the angle from radians to degrees
-  fse_deg <- fse_rad * (180 / pi)
+  angle_deg <- angle_rad * (180 / pi)
 
-  # Calculate the angle at vertex F (angle EF and FS)
-  f_deg <- 180 - fse_deg
+  # Normalize the angle to the range [0, 360)
+  angle_deg_normalized <- 180 - (angle_deg) %% 360
 
-  return(f_deg)
+  return(angle_deg_normalized)
 }
+
 ```
 
 ```{r}
-# Apply the function that calculates the angle to the data
-wk2_track_data <- wk2_track_data %>%
-  rowwise() %>%
-  mutate(
-    angle_furthest = find.angle.f(start_x, start_y, end_x, end_y, furthest_x, furthest_y),
-    angle_furthest = ifelse(playSide == "left", 360 - angle_furthest, angle_furthest)
-  )
-```
-
-```{r}
-ggplot(wk2_track_data %>% distinct(gamePlayId, angle_furthest, playSide), aes(x = angle_furthest)) +
-  geom_histogram() +
-  facet_wrap(~playSide)
-```
-
-```{r}
-ggplot(wk2_track_data %>% distinct(gamePlayId, angle_furthest, playSide, expectedPointsAdded), aes(x = angle_furthest, y = expectedPointsAdded)) +
-  geom_point() +
-  facet_wrap(~playSide) +
-  geom_smooth()
+# Function that calculates the smallest difference between two angles, correctly handling the wrap-around at 360 degrees.
+smallest_angle_diff <- function(angle1, angle2) {
+  diff <- abs(angle1 - angle2)
+  ifelse(diff > 180, 360 - diff, diff)
+}
 ```
 
 
 # Finding the greatest change in direction
 
 ```{r}
-# For each frame, calculate mean coordinates of surrounding frames and use them to calculate angles
-ball_carrier_grouped <- wk2_track_data %>%
+angls <- wk2_track_data %>%
+  filter(frameId >= start_frameId & frameId <= end_frameId) %>%
   filter(nflId == ballCarrierId) %>%
   group_by(gamePlayId) %>%
   arrange(gamePlayId, frameId) %>%
-  mutate(
-    mean_cur_x = rowMeans(cbind(lag(x, 1, default = NA), x, lead(x, 1, default = NA)), na.rm = TRUE),
-    mean_cur_y = rowMeans(cbind(lag(y, 1, default = NA), y, lead(y, 1, default = NA)), na.rm = TRUE),
-    mean_prev_x = rowMeans(cbind(lag(x, 2, default = NA), lag(x, 3, default = NA), lag(x, 4, default = NA)), na.rm = TRUE),
-    mean_prev_y = rowMeans(cbind(lag(y, 2, default = NA), lag(y, 3, default = NA), lag(y, 4, default = NA)), na.rm = TRUE),
-    mean_next_x = rowMeans(cbind(lead(x, 2, default = NA), lead(x, 3, default = NA), lead(x, 4, default = NA)), na.rm = TRUE),
-    mean_next_y = rowMeans(cbind(lead(y, 2, default = NA), lead(y, 3, default = NA), lead(y, 4, default = NA)), na.rm = TRUE)
-  ) %>%
-  ungroup()
+  reframe(gamePlayId, frameId,
+    # Calculate the angle using the find.angle.f function
+    angle = find.angle.f(lag(x, 1, default = NA), lag(y, 1, default = NA), 
+                         lead(x, 1, default = NA), lead(y, 1, default = NA), 
+                         x, y),
 
-# Calculate the angle for each frame using mean coordinates
-ball_carrier_grouped <- ball_carrier_grouped %>%
-  rowwise() %>%
-  mutate(
-    angle = find.angle.f(mean_prev_x, mean_prev_y, mean_next_x, mean_next_y, mean_cur_x, mean_cur_y),
-    angle = ifelse(playSide == "left", 360 - angle, angle),
-    angle_diff_from_180 = abs(180 - angle)
+    # Calculate the absolute change in angle between frames
+    angle_change = abs(angle - lag(angle, 1, default = NA)),
+
+    # Calculate the absolute change in orientation between frames
+    orientation_change = smallest_angle_diff(o, lag(o, 1, default = NA)),
+
+    # Create a composite measure of change
+    total_change = angle_change + orientation_change,
+    
+    # Angle adjusting for cutbacks or bounces (greater than 0 bounce, 360 or less cutback)
+    relative_angle = ifelse((playSide == "left" & lead(y, 1, default = NA) < y) |
+                              (playSide == "right" & lead(y, 1, default = NA) > y), (0 - angle) %% 360, angle)
   ) %>%
-  ungroup()
+  ungroup() %>% na.omit() %>%
+  # Deal with extremely large orientation changes
+  # If orientation change huge, just use angle change
+  # Calculate the 99th percentile of angle_change
+  mutate(orientation_change_99th = quantile(orientation_change, 0.99, na.rm = TRUE)) %>%
+  mutate(
+    total_change = ifelse(orientation_change > orientation_change_99th, angle_change + orientation_change_99th, total_change)
+  ) %>%
+  select(-orientation_change_99th)
+
+# correlation of angle change and orientation change
+angls %>% select(angle_change, orientation_change) %>% cor()
 
 # Find the frame with the greatest change in direction and the corresponding angle
-max_angle_change <- ball_carrier_grouped %>%
+max_angle_change <- angls %>%
   group_by(gamePlayId) %>%
-  filter(frameId >= start_frameId & frameId <= end_frameId) %>%
-  filter(angle_diff_from_180 == max(angle_diff_from_180, na.rm = TRUE)) %>%
-  reframe(playSide,
-    angle_at_max_diff = first(angle),
-    frameId_at_max_diff = first(frameId)
+  filter(total_change == max(total_change, na.rm = TRUE)) %>%
+  mutate(
+    angle_change_at_max_change = angle_change,
+    orientation_change_at_max_change = orientation_change,
+    total_change_at_max_change = total_change,
+    angle_at_max_change = first(angle),
+    relative_angle_at_max_change = first(relative_angle),
+    frameId_at_max_change = first(frameId)
   ) %>%
-  distinct(gamePlayId, playSide, angle_at_max_diff, frameId_at_max_diff)
+  distinct(gamePlayId, frameId_at_max_change, angle_change_at_max_change, orientation_change_at_max_change, total_change_at_max_change, total_change_at_max_change, angle_at_max_change, relative_angle_at_max_change)
+
+max_angle_change %>% ungroup() %>% select(angle_change_at_max_change, orientation_change_at_max_change) %>% cor()
 ```
 
 ```{r}
-wk2_track_data <- merge(wk2_track_data, max_angle_change %>% select(-playSide), by = "gamePlayId")
+wk2_track_data <- full_join(wk2_track_data, angls, by = c("gamePlayId", "frameId"))
+wk2_track_data <- full_join(wk2_track_data, max_angle_change, by = "gamePlayId")
 ```
 
 
 ```{r}
-ggplot(max_angle_change, aes(x = angle_at_max_diff)) +
-  geom_histogram() +
-  facet_wrap(~playSide)
+ggplot(max_angle_change, aes(x = total_change_at_max_change)) +
+  geom_histogram() 
 
-ggplot(wk2_track_data %>% distinct(gamePlayId, angle_at_max_diff, playSide, expectedPointsAdded), aes(x = angle_at_max_diff, y = expectedPointsAdded)) +
+ggplot(wk2_track_data %>% distinct(gamePlayId, total_change_at_max_change, expectedPointsAdded), aes(x = total_change_at_max_change, y = expectedPointsAdded)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth()
+
+ggplot(wk2_track_data %>% distinct(gamePlayId, start_frameId, frameId_at_max_change, playSide, expectedPointsAdded), aes(x = frameId_at_max_change - start_frameId, y = expectedPointsAdded)) +
   geom_point() +
   facet_wrap(~playSide) +
   geom_smooth()
-
-ggplot(wk2_track_data %>% distinct(gamePlayId, start_frameId, frameId_at_max_diff, playSide, expectedPointsAdded), aes(x = frameId_at_max_diff - start_frameId, y = expectedPointsAdded)) +
-  geom_point() +
-  facet_wrap(~playSide) +
-  geom_smooth()
 ```
 
 
-```{r}
-wk2_track_data %>%
-  group_by(gamePlayId) %>%
-  reframe(frame_comparison = abs(frameId_at_max_diff - furthest_frameId)) %>%
-  distinct(gamePlayId, frame_comparison) %>%
-  ggplot(aes(x = frame_comparison)) +
-  geom_histogram()
-```
 
 # Where the greates change in direction occurs calculate that angle with the end point
 
 ```{r}
 full_angle <- wk2_track_data %>%
   filter(nflId == ballCarrierId) %>%
-  filter(frameId == frameId_at_max_diff) %>%
+  filter(frameId == frameId_at_max_change) %>%
   mutate(
-    angle_greatestChange = find.angle.f(start_x, start_y, end_x, end_y, x, y),
-    angle_greatestChange = ifelse(playSide == "left", 360 - angle_greatestChange, angle_greatestChange)
+    angle_greatestChange = find.angle.f(start_x, start_y, end_x, end_y, x, y)
   )
 ```
 
@@ -436,13 +390,13 @@ ggplot(full_angle, aes(x = angle_greatestChange)) +
   facet_wrap(~playSide) +
   geom_vline(xintercept = 180, linetype = "dashed")
 
-ggplot(full_angle, aes(x = angle_at_max_diff, y = expectedPointsAdded)) +
+ggplot(full_angle, aes(x = angle_at_max_change, y = expectedPointsAdded)) +
   geom_point() +
   facet_wrap(~playSide) +
   geom_smooth() +
   geom_vline(xintercept = 180, linetype = "dashed")
 
-ggplot(full_angle %>% filter(expectedPointsAdded != min(expectedPointsAdded)), aes(x = frameId_at_max_diff - start_frameId)) +
+ggplot(full_angle %>% filter(expectedPointsAdded != min(expectedPointsAdded)), aes(x = frameId_at_max_change - start_frameId)) +
   geom_histogram() +
   facet_wrap(~playSide)
 ```
@@ -453,15 +407,11 @@ wk2_track_data <- merge(wk2_track_data, full_angle %>% select(gamePlayId, angle_
 
 
 
-
+# Edge Intensity Rating
 
 
 ```{r}
-# Function to calculate the smallest angular difference
-smallest_angle_diff <- function(angle1, angle2) {
-  diff <- abs(angle1 - angle2)
-  ifelse(diff > 180, 360 - diff, diff)
-}
+
 
 
 ballcarrier <- wk2_track_data %>%
@@ -475,20 +425,9 @@ ballcarrier <- wk2_track_data %>%
     ballCarrier_a = a,
     ballCarrier_o = o
   ) %>%
-  mutate(
-    # Standardize orientation based on playSide
-    ballCarrier_standardized_orientation = ifelse(playSide == "left", 360 - ballCarrier_o, ballCarrier_o)
-  ) %>%
-  group_by(gamePlayId) %>%
-  mutate(
-    # Calculate previous frame's standardized orientation
-    prev_standardized_orientation = lag(ballCarrier_standardized_orientation, 1, default = first(ballCarrier_standardized_orientation)),
-    # Calculate the smallest difference in orientation between frames
-    ballCarrier_orientation_change = smallest_angle_diff(ballCarrier_standardized_orientation, prev_standardized_orientation)
-  ) %>%
   select(
     gamePlayId, frameId, ballCarrier_x, ballCarrier_y,
-    ballCarrier_s, ballCarrier_a, ballCarrier_o, ballCarrier_orientation_change, ballCarrier_standardized_orientation
+    ballCarrier_s, ballCarrier_a, ballCarrier_o
   )
 
 wk2_track_data <- full_join(wk2_track_data, ballcarrier, by = c("gamePlayId", "frameId"))
@@ -502,7 +441,7 @@ edgedefenders <- wk2_track_data %>%
   # calculate player distance from ball carrier
   mutate(distance_from_ballCarrier = sqrt((x - ballCarrier_x)^2 + (y - ballCarrier_y)^2)) %>%
   filter(ifelse(playSide == "left", y >= ballCarrier_y, y <= ballCarrier_y)) %>%
-  filter(distance_from_ballCarrier <= 15) %>%
+  filter(distance_from_ballCarrier <= 5) %>%
   #mutate(edgeSetterId = nflId) %>%
   mutate(
     angle_toballCarrier = abs(atan2(y - ballCarrier_y, x - ballCarrier_x) * (180 / pi)),
@@ -522,7 +461,6 @@ wk2_track_data <- full_join(wk2_track_data, edgedefenders %>% select(-c(x,y,s,a,
 
 ballcarrier_edgedefenders <- wk2_track_data %>%
   select(ballCarrierId, colnames(ballcarrier), colnames(edgedefenders), start_frameId, end_frameId) %>%
-  left_join(ball_carrier_grouped %>% select(gamePlayId, frameId, angle_diff_from_180), by = c("gamePlayId", "frameId")) %>%
   filter(frameId >= start_frameId & frameId <= end_frameId) %>%
   select(-start_frameId, -end_frameId) %>%
   mutate(
@@ -566,9 +504,9 @@ ballcarrier_edgedefenders <- wk2_track_data %>%
       edgeDef_velocity_y * ballCarrier_movement_unit_y)
   ) %>%
   select(
-    gamePlayId, frameId, ballCarrierId, ballCarrier_s, ballCarrier_a, angle_diff_from_180, ballCarrier_orientation_change,
+    gamePlayId, frameId, ballCarrierId, 
     nflId,
-    distance_from_ballCarrier, angle_toballCarrier, relative_o_to_ballCarrier,
+    distance_from_ballCarrier, relative_o_to_ballCarrier,
     angle_toIdealPath, edgeDef_speed_towards_ballCarrier, edgeDef_speed_towards_ballCarrierPath
   ) %>%
   na.omit()
@@ -580,14 +518,9 @@ ballcarrier_edgedefenders <- wk2_track_data %>%
 EIR <- ballcarrier_edgedefenders %>%
   mutate(
     # Scaling variables where lower is better
-    scale_s = 1 - (ballCarrier_s - min(ballCarrier_s, na.rm = TRUE)) / (max(ballCarrier_s, na.rm = TRUE) - min(ballCarrier_s, na.rm = TRUE)),
-    scale_a = 1 - (ballCarrier_a - min(ballCarrier_a, na.rm = TRUE)) / (max(ballCarrier_a, na.rm = TRUE) - min(ballCarrier_a, na.rm = TRUE)),
     scale_dist = 1 - (distance_from_ballCarrier - min(distance_from_ballCarrier, na.rm = TRUE)) / (max(distance_from_ballCarrier, na.rm = TRUE) - min(distance_from_ballCarrier, na.rm = TRUE)),
-    scale_angle = 1 - (angle_toballCarrier - min(angle_toballCarrier, na.rm = TRUE)) / (max(angle_toballCarrier, na.rm = TRUE) - min(angle_toballCarrier, na.rm = TRUE)),
 
     # Scaling variables where higher is better
-    scale_angle_diff = (angle_diff_from_180 - min(angle_diff_from_180, na.rm = TRUE)) / (max(angle_diff_from_180, na.rm = TRUE) - min(angle_diff_from_180, na.rm = TRUE)),
-    scale_orientation_change = (ballCarrier_orientation_change - min(ballCarrier_orientation_change, na.rm = TRUE)) / (max(ballCarrier_orientation_change, na.rm = TRUE) - min(ballCarrier_orientation_change, na.rm = TRUE)),
     scale_speed_towards_bc = (edgeDef_speed_towards_ballCarrier - min(edgeDef_speed_towards_ballCarrier, na.rm = TRUE)) / (max(edgeDef_speed_towards_ballCarrier, na.rm = TRUE) - min(edgeDef_speed_towards_ballCarrier, na.rm = TRUE)),
     scale_speed_towards_path = (edgeDef_speed_towards_ballCarrierPath - min(edgeDef_speed_towards_ballCarrierPath, na.rm = TRUE)) / (max(edgeDef_speed_towards_ballCarrierPath, na.rm = TRUE) - min(edgeDef_speed_towards_ballCarrierPath, na.rm = TRUE)),
 
@@ -600,11 +533,8 @@ EIR <- ballcarrier_edgedefenders %>%
   ) %>%
   # Calculate the mean of the scaled values
   reframe(gamePlayId, frameId, nflId,
-    edge_intensity_percentage = rowMeans(select(., starts_with("scale_")), na.rm = TRUE)
-  ) %>%
-  mutate(
-    edge_intensity_rating = ((edge_intensity_percentage - min(edge_intensity_percentage)) / (max(edge_intensity_percentage) - min(edge_intensity_percentage))) * 100  
-  )
+    edge_intensity_rating = rowMeans(select(., starts_with("scale_")), na.rm = TRUE) * 100
+  ) 
 ```
 
 ```{r}
@@ -613,12 +543,34 @@ ggplot(EIR,
   geom_histogram() +
   labs(title = "Distribution of Edge Intensity Percentage", x = "Edge Intensity Percentage", y = "Count")
 
-ggplot(EIR, aes(x = edge_intensity_rating)) +
-  geom_histogram() +
-  labs(title = "Distribution of Edge Intensity Ratings", x = "Edge Intensity Rating", y = "Count")
+```
 
+```{r}
+wk2_track_data <- full_join(wk2_track_data, EIR, by = c("gamePlayId", "frameId", "nflId"))
 
 ```
+
+```{r}
+test_run <- wk2_track_data %>% filter(gameId == 2022091500, playId == 1983)
+nfl_field(c(0, 120)) +
+  geom_point(
+    data = test_run, aes(x = x, y = y, color = club),
+    show.legend = FALSE,
+    size = 2
+  ) +
+  geom_point(data = test_run %>% filter(!is.na(edge_intensity_rating)), aes(x = x, y = y), color = "black") +
+  transition_time(frameId) +
+  scale_color_manual(values = c("purple", "yellow", "white"))
+```
+
+```{r}
+wk2_track_data %>% 
+  ggplot(aes(x = edge_intensity_rating, y = angle_diff_from_180)) +
+  geom_point(alpha = 0.1) +
+  geom_smooth() +
+  labs(title = "Edge Intensity Rating vs. Angle Difference from 180", x = "Edge Intensity Rating", y = "Angle Difference from 180")
+```
+
 
 
 # Save the data
