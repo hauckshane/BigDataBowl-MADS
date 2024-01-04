@@ -551,15 +551,15 @@ wk2_track_data <- full_join(wk2_track_data, EIR, by = c("gamePlayId", "frameId",
 ```
 
 ```{r}
-test_run <- wk2_track_data %>% filter(gameId == 2022091500, playId == 1983)
+test_run <- wk2_track_data %>% filter(gameId == 2022091900, playId == 3980)
 nfl_field(c(0, 120)) +
   geom_point(
     data = test_run, aes(x = x, y = y, color = club),
     show.legend = FALSE,
     size = 2
   ) +
-  geom_point(data = test_run %>% filter(position %in% c("G","T", "C")), aes(x = x, y = y), color = "black", size = 2) +
-  #geom_point(data = test_run %>% filter(!is.na(edge_intensity_rating)), aes(x = x, y = y), color = "black") +
+  #geom_point(data = test_run %>% filter(position %in% c("G","T", "C")), aes(x = x, y = y), color = "black", size = 2) +
+  geom_point(data = test_run %>% filter(!is.na(edge_intensity_rating)), aes(x = x, y = y), color = "black") +
   transition_time(frameId) +
   scale_color_manual(values = c("purple", "yellow", "white"))
 ```
@@ -583,6 +583,20 @@ wk2_track_data %>% filter(!is.na(edge_intensity_rating)) %>%
   arrange(desc(count))
 ```
 
+```{r}
+team_EIRs <- wk2_track_data %>% filter(!is.na(edge_intensity_rating)) %>%
+  group_by(gamePlayId, frameId) %>%
+  mutate(rank_EIR = rank(desc(edge_intensity_rating)),
+         weighted_EIR = edge_intensity_rating * (1 / rank_EIR)) %>%
+  filter(rank_EIR <= 3) %>%
+  mutate(team_EIR = sum(weighted_EIR)) %>%
+  select(gamePlayId, frameId, nflId, rank_EIR, weighted_EIR, team_EIR) 
+  
+```
+
+```{r}
+wk2_track_data <- full_join(wk2_track_data, team_EIRs, by = c("gamePlayId", "frameId", "nflId"))
+```
 
 
 
