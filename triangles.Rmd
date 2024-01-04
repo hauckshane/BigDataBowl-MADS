@@ -621,14 +621,96 @@ ggplot(testing_run,
 ```
 
 ```{r}
-wk2_track_data %>% 
+plotdf <- wk2_track_data %>% 
   filter(frameId == frameId_at_max_change) %>%
-  filter(total_change_at_max_change < 50) %>%
-  ggplot(aes(y = relative_angle, x = relative_angle)) +
-  geom_point(alpha = 0.01) +
-  labs(title = "Edge Intensity Rating vs. Angle Difference from 180", x = "Edge Intensity Rating", y = "Angle Difference from 180") +
+  filter(nflId == ballCarrierId) %>%
+  filter(total_change_at_max_change < 30) %>%
+  select(total_change_at_max_change, expectedPointsAdded) %>%
+  mutate(bucket = cut(total_change_at_max_change, breaks = seq(0, 30, 3))
+         ) %>% 
+  group_by(bucket) %>% 
+  mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", as.character(bucket)))) %>%
+  mutate(meanEPA = mean(expectedPointsAdded)) 
+ggplot(plotdf, aes(x = bucket_angle_min, y = 1, fill = meanEPA)) +
+  geom_col() +
   coord_polar() +
-  facet_wrap(~playSide)
+  scale_x_continuous(limits = c(0,180)) +
+  scale_y_continuous(limits = c(0,1)) +
+  scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA)) +
+  labs(title = "Expected Points Added by Greatest Total Change of Direction", subtitle = "For plays where the ball carrier had the highest change in total direction", x = "Total Change", y = "", fill = "EPA") +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        plot.title = element_text(size = 16),
+        plot.subtitle = element_text(size = 12),
+        legend.key.size = unit(1, "cm"))
+
+plotdf <- wk2_track_data %>% 
+  filter(frameId == frameId_at_max_change) %>%
+  filter(nflId == ballCarrierId) %>%
+  filter(abs(relative_total_change) < 25) %>%
+  select(relative_total_change, expectedPointsAdded) %>%
+  mutate(bucket = cut(relative_total_change, breaks = seq(-25, 25, 5))
+         ) %>% 
+  group_by(bucket) %>% 
+  mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", as.character(bucket))),
+         bucket_angle_max = as.numeric(gsub("\\[|\\]", "", gsub(".*,(.*)\\]", "\\1", as.character(bucket)))),
+         bucket_angle_mean = (bucket_angle_min + bucket_angle_max) / 2) %>%
+  mutate(meanEPA = mean(expectedPointsAdded)) 
+ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
+  geom_col(aes(fill = meanEPA)) +
+  coord_polar(start = 66) +
+  scale_x_continuous(limits = c(-180,180)) +
+  scale_y_continuous(limits = c(0,1)) +
+  labs(title = "EPA by Relative Angle", x = "Relative Angle", y = " ", subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
+       fill = "EPA")  +
+  scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA)) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        plot.title = element_text(size = 16),
+        plot.subtitle = element_text(size = 12),
+        legend.key.size = unit(1, "cm"))
+  
+plotdf3 <- wk2_track_data %>% 
+  filter(frameId == frameId_at_max_change) %>%
+  filter(nflId == ballCarrierId) %>%
+  filter(abs(relative_total_change) < 25) %>%
+  select(relative_total_change, expectedPointsAdded, playSide) %>%
+  group_by(playSide) %>%
+  mutate(bucket = cut(relative_total_change, breaks = seq(-25, 25, 15))
+         ) %>%
+  group_by(playSide, bucket) %>%
+  mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", as.character(bucket))),
+         bucket_angle_max = as.numeric(gsub("\\[|\\]", "", gsub(".*,(.*)\\]", "\\1", as.character(bucket)))),
+         bucket_angle_mean = (bucket_angle_min + bucket_angle_max) / 2) %>%
+  mutate(meanEPA = mean(expectedPointsAdded),
+         meanEPA = ifelse(playSide == "left", meanEPA * -1, meanEPA)) %>%
+  mutate(playSidedescr = ifelse(playSide == "left", "Plays to the Left", "Plays to the Right"))
+
+ggplot(plotdf3, aes(x = bucket_angle_mean, y = 1)) +
+  geom_col(aes(fill = meanEPA)) +
+  coord_polar(start = 66) +
+  scale_x_continuous(limits = c(-50,50)) +
+  scale_y_continuous(limits = c(0,1)) +
+  labs(title = "EPA by Direction of Greatest Cut", x = "Greatest Change of Direction", y = " ", subtitle = "Considering the direction of the playside:", fill = "EPA")  +
+  scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf3$meanEPA)) +
+  facet_wrap(~playSidedescr) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_blank(),
+        plot.title = element_text(size = 16),
+        plot.subtitle = element_text(size = 12),
+        legend.key.size = unit(1, "cm"),
+        strip.text = element_text(size = 18))
+```
+
+```{r}
 ```
 
 ```{r}
