@@ -254,5 +254,5 @@ all_data <- all_data %>%
 
 ```{r}
 maxChangesEIR <- all_data %>% distinct(gamePlayId, ballCarrierId, edgeSetterId_atMaxChange, frames_from_start_atMaxChange, total_change_at_max_change, max_EIR_atMaxChange)
-```
+``` 
 
