@@ -13,7 +13,7 @@ library(tidyverse)
 library(ggplot2)
 
 # Read in the data
-df <- read.csv("all_processed_data.csv")
+df <- read.csv("filtered_processed_data.csv")
 
 # Set the change range for viewing graphs
 max_range <- 30

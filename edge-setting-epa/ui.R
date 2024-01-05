@@ -13,7 +13,7 @@ library(tidyverse)
 library(ggplot2)
 
 # Get list of teams
-df <- read.csv("all_processed_data.csv")
+df <- read.csv("filtered_processed_data.csv")
 
 fluidPage(
   titlePanel("Company Hiring Activity"),
