@@ -33,6 +33,12 @@ all_data <- all_data %>% filter(!grepl("PENALTY", playDescription))
 all_data <- all_data %>% filter(total_change_at_max_change < 30)
 ```
 
+# Filter out unusual EPA
+```{r}
+all_data <- all_data %>% filter(abs(expectedPointsAdded) <= 6) %>% filter(!is.na(expectPointsAdded))
+```
+
+
 # Get information about the ball carrier during time of interest
 ```{r}
 ballcarrier <- all_data %>%
@@ -263,7 +269,6 @@ maxChangesEIR <- all_data %>%
 # Filter out really large EPA
 ```{r}
 maxChangesEIR <- maxChangesEIR %>%
-  filter(abs(expectedPointsAdded) <= 6) %>%
   # as well as one random NA value
   na.omit()
 ```
@@ -353,4 +358,4 @@ ggplot(EIR_RTC_plot, aes(x = bucket_angle_min, y = 1, fill = meanEIR)) +
         legend.key.size = unit(1, "cm"))
 ```
 
-\
+
