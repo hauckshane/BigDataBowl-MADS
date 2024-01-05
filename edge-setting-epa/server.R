@@ -17,6 +17,7 @@ df <- read.csv("all_processed_data.csv")
 
 # Set the change range for viewing graphs
 max_range <- 30
+n_buckets <- 5
 df <- filter(df, total_change_at_max_change < max_range)
 
 # Create subsets of the data for plot purposes
@@ -24,8 +25,8 @@ change_df <- df %>%
   filter(abs(relative_total_change) < max_range) %>%
   select(relative_total_change, expectedPointsAdded, 
          possessionTeam, defensiveTeam) %>%
-  mutate(bucket = cut(relative_total_change, breaks = seq(0, max_range, 
-                                                          max_range / 10))) %>% 
+  mutate(bucket = cut(relative_total_change, breaks = seq(-max_range, max_range, 
+                                                          (max_range * 2) / n_buckets))) %>% 
   group_by(bucket) %>% 
   mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", 
                                            as.character(bucket))),
@@ -41,8 +42,8 @@ playside_df <- df %>%
   select(relative_total_change, expectedPointsAdded, playSide,
          possessionTeam, defensiveTeam) %>%
   group_by(playSide) %>%
-  mutate(bucket = cut(relative_total_change, breaks = seq(0, max_range, 
-                                                          max_range / 10)))%>%
+  mutate(bucket = cut(relative_total_change, breaks = seq(-max_range, max_range, 
+                                                          (max_range * 2) / n_buckets)))%>%
   group_by(playSide, bucket) %>%
   mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", 
                                            as.character(bucket))),
@@ -70,7 +71,7 @@ function(input, output, session) {
   })
   
   playside_o_df <- reactive({
-    filter(playside_df, defensiveTeam == input$team)
+    filter(playside_df, possessionTeam == input$team)
   })
   
   playside_d_df <- reactive({
