@@ -1,0 +1,258 @@
+---
+title: "Edge Intensity Rating"
+author: "Shane Hauck, Marion Haney, Devin Basley, Vinay Maruri"
+date: "2024-1-5"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(gganimate)
+theme_set(theme_bw())
+```
+
+```{r}
+#read in data
+all_data <- read_csv("data/all_processed_data.csv")
+```
+
+
+
+# Filter out penaltys
+
+```{r}
+# Remove plays where playDescription includes "PENALTY"
+all_data <- all_data %>% filter(!grepl("PENALTY", playDescription))
+```
+
+
+# Filter out unusually big changes in direction
+```{r}
+all_data <- all_data %>% filter(total_change_at_max_change < 30)
+```
+
+# Get information about the ball carrier during time of interest
+```{r}
+ballcarrier <- all_data %>%
+  group_by(gamePlayId, frameId) %>%
+  filter(frameId > start_frameId & frameId < end_frameId) %>%
+  filter(nflId == ballCarrierId) %>%
+  mutate(
+    ballCarrier_x = x,
+    ballCarrier_y = y,
+    ballCarrier_s = s,
+    ballCarrier_a = a,
+    ballCarrier_o = o
+  ) %>%
+  select(
+    gamePlayId, frameId, ballCarrier_x, ballCarrier_y,
+    ballCarrier_s, ballCarrier_a, ballCarrier_o
+  )
+
+all_data <- full_join(all_data, ballcarrier, by = c("gamePlayId", "frameId"))
+```
+
+# Get information about players being considered as edge defenders
+```{r}
+edgedefenders <- all_data %>%
+  group_by(gamePlayId, frameId) %>%
+  filter(
+    club != possessionTeam,
+    club != "football"
+  ) %>%
+  # Filter players with a y coordinate prior to snap not relative to play side
+  mutate(
+    y_at_5 = ifelse(frameId == 5, y, NA)
+  ) %>%
+  group_by(nflId, gamePlayId) %>%
+  fill(y_at_5, .direction = c("updown")) %>%
+  ungroup() %>%
+  filter(ifelse(playSide == "left", y_at_5 > ballY_preSnap, y_at_5 < ballY_preSnap)) %>%
+  # Calculate player distance from ball carrier
+  mutate(distance_from_ballCarrier = sqrt((x - ballCarrier_x)^2 + (y - ballCarrier_y)^2)) %>%
+  # Filter players so they are on the playside edge of the ball carrier
+  filter(ifelse(playSide == "left", y >= ballCarrier_y, y <= ballCarrier_y)) %>%
+  # Filter players so they are within 5 yards of ball carrier or is closest player
+  #group_by(gamePlayId, frameId) %>%
+  #filter(distance_from_ballCarrier <= 5 |
+  #         distance_from_ballCarrier == min(distance_from_ballCarrier, na.rm = T)) %>%
+  #ungroup() %>%
+  #mutate(edgeSetterId = nflId) %>%
+  mutate(
+    # Calculate angle to ball carrier
+    angle_toballCarrier = abs(atan2(y - ballCarrier_y, x - ballCarrier_x) * (180 / pi)),
+    # Calculate and adjust orientation relative to the ball carrier
+    relative_o_to_ballCarrier = (((o - (atan2(y - ballCarrier_y, x - ballCarrier_x) *
+      (180 / pi))) %% 360) +
+      ifelse(playSide == "left", 180, 0)) %% 360
+  ) %>%
+  select(
+    gamePlayId, frameId, playSide, nflId, distance_from_ballCarrier,
+    x, y, angle_toballCarrier, s, a, relative_o_to_ballCarrier
+  )
+
+all_data <- full_join(all_data, edgedefenders %>% select(-c(x,y,s,a, playSide)), by = c("gamePlayId", "frameId", "nflId"))
+```
+
+# Information about ball carriers and edge defenders
+
+```{r}
+ballcarrier_edgedefenders <- all_data %>%
+  select(ballCarrierId, colnames(ballcarrier), colnames(edgedefenders), total_change, start_frameId, end_frameId, frameId_at_max_change) %>%
+  filter(frameId >= start_frameId & frameId <= frameId_at_max_change + 1) %>%
+  select(-start_frameId, -end_frameId, -frameId_at_max_change) %>%
+  mutate(
+    # Calculate edge defender's angle relative to ball carrier's ideal path
+    angle_toIdealPath = ifelse(playSide == "left",
+      (360 - ((angle_toballCarrier - ballCarrier_o) + 360) %% 360),
+      ((angle_toballCarrier - ballCarrier_o) + 360) %% 360
+    )
+  ) %>%
+  mutate(
+    # Convert orientations to radians
+    ballCarrier_o_rad = ballCarrier_o * (pi / 180),
+    edgeDef_o_rad = relative_o_to_ballCarrier * (pi / 180),
+
+    # Calculate components of velocity
+    ballCarrier_velocity_x = ballCarrier_s * cos(ballCarrier_o_rad),
+    ballCarrier_velocity_y = ballCarrier_s * sin(ballCarrier_o_rad),
+    edgeDef_velocity_x = s * cos(edgeDef_o_rad),
+    edgeDef_velocity_y = s * sin(edgeDef_o_rad),
+
+    # Calculate vector from edge setter to ball carrier
+    vector_to_ballCarrier_x = ballCarrier_x - x,
+    vector_to_ballCarrier_y = ballCarrier_y - y,
+
+    # Project speed of edge setter towards ball carrier
+    edgeDef_speed_towards_ballCarrier = (edgeDef_velocity_x * vector_to_ballCarrier_x +
+      edgeDef_velocity_y * vector_to_ballCarrier_y) /
+      sqrt(vector_to_ballCarrier_x^2 + vector_to_ballCarrier_y^2),
+    
+    # Calculate components of acceleration
+    ballCarrier_acceleration_x = ballCarrier_a * cos(ballCarrier_o_rad),
+    ballCarrier_acceleration_y = ballCarrier_a * sin(ballCarrier_o_rad),
+    edgeDef_acceleration_x = a * cos(edgeDef_o_rad),
+    edgeDef_acceleration_y = a * sin(edgeDef_o_rad),
+
+    # Calculate vector from edge defender to ball carrier
+    vector_to_ballCarrier_x = ballCarrier_x - x,
+    vector_to_ballCarrier_y = ballCarrier_y - y,
+
+    # Project acceleration of edge defender towards ball carrier
+    edgeDef_acceleration_towards_ballCarrier = (edgeDef_acceleration_x * vector_to_ballCarrier_x +
+                                                edgeDef_acceleration_y * vector_to_ballCarrier_y) /
+                                               sqrt(vector_to_ballCarrier_x^2 + vector_to_ballCarrier_y^2),
+
+  ) %>%
+  select(
+    gamePlayId, frameId, ballCarrierId, nflId,
+    # defender stats
+    distance_from_ballCarrier, relative_o_to_ballCarrier,
+    angle_toIdealPath, edgeDef_speed_towards_ballCarrier, edgeDef_acceleration_towards_ballCarrier,
+    # ball carrier stats
+    total_change, ballCarrier_s, ballCarrier_a
+  ) %>%
+  na.omit()
+```
+
+# Create Edge Intensity Rating
+
+```{r}
+EIR <- ballcarrier_edgedefenders %>%
+  mutate(
+    # Normalization of variables on a scale of 0 to 1 (0 worse, 1 better)
+    
+    # Scaling variables where lower is better
+    
+    # Distance to ball carrier
+    scale_dist = 1 - 
+      (distance_from_ballCarrier - min(distance_from_ballCarrier, na.rm = TRUE)) / 
+      (max(distance_from_ballCarrier, na.rm = TRUE) - min(distance_from_ballCarrier, na.rm = TRUE)),
+    
+    # Speed of defender
+    scale_s = 1 - 
+      (ballCarrier_s - min(ballCarrier_s, na.rm = TRUE)) / 
+      (max(ballCarrier_s, na.rm = TRUE) - min(ballCarrier_s, na.rm = TRUE)),
+    
+    # Acceleration of defender
+    scale_a = 1 - 
+      (ballCarrier_a - min(ballCarrier_a, na.rm = TRUE)) / 
+      (max(ballCarrier_a, na.rm = TRUE) - min(ballCarrier_a, na.rm = TRUE)),
+
+    # Scaling variables where higher is better
+    
+    # Speed of defender towards ball carrier relative to how close a player is to ball carrier
+    edgeDef_speed_towards_bc_relative = edgeDef_speed_towards_ballCarrier * scale_dist,
+    scale_speed_towards_bc = 
+      ((edgeDef_speed_towards_bc_relative - min(edgeDef_speed_towards_bc_relative, na.rm = TRUE)) /
+      (max(edgeDef_speed_towards_bc_relative, na.rm = TRUE) - min(edgeDef_speed_towards_bc_relative, na.rm = TRUE))),
+    
+    # Acceleration of defender towards ball carrier
+    edgeDef_acceleration_towards_bc_relative = edgeDef_acceleration_towards_ballCarrier * scale_dist,
+    scale_acceleration_towards_bc = 
+      ((edgeDef_acceleration_towards_bc_relative - min(edgeDef_acceleration_towards_bc_relative, na.rm = TRUE)) /
+      (max(edgeDef_acceleration_towards_bc_relative, na.rm = TRUE) - min(edgeDef_acceleration_towards_bc_relative, na.rm = TRUE))),
+    
+    # Total change of ball carrier
+    scale_total_change = 
+      (total_change - min(total_change, na.rm = TRUE)) / 
+      (max(total_change, na.rm = TRUE) - min(total_change, na.rm = TRUE)),
+    
+    # Scaling degrees variables
+    
+    # Orientation of defender relative to ball carrier
+    scale_o_to_bc = ((cos(pi * relative_o_to_ballCarrier / 180) + 1) / 2) * scale_dist,  
+    
+    # Angle of defender relative to ball carrier's ideal path
+    scale_angle_to_path = ((cos(pi * angle_toIdealPath / 180) + 1) / 2) * scale_dist,
+    
+    
+  ) %>%
+  # Calculate the mean of the scaled values
+  reframe(gamePlayId, frameId, nflId,
+    edge_intensity_rating = rowMeans(select(., starts_with("scale_")), na.rm = TRUE),
+    # Normalize EIR to a scale of 0 to 100
+    edge_intensity_rating = ((edge_intensity_rating - min(edge_intensity_rating, na.rm = TRUE)) / 
+      (max(edge_intensity_rating, na.rm = TRUE) - min(edge_intensity_rating, na.rm = TRUE))) * 100
+  ) 
+
+all_data <- full_join(all_data, EIR, by = c("gamePlayId", "frameId", "nflId"))
+```
+
+
+# Create variable for highest EIR at each frame
+
+```{r}
+all_data <- all_data %>%
+  group_by(gamePlayId, frameId) %>%
+  mutate(
+    max_EIR_atFrame = max(edge_intensity_rating, na.rm = TRUE),
+    max_EIR_atFrame = ifelse(max_EIR_atFrame == -Inf, NA, max_EIR_atFrame),
+    frames_from_start = frameId - start_frameId
+  ) %>%
+  mutate(
+    edgeSetterId_atFrame = ifelse(edge_intensity_rating == max_EIR_atFrame, nflId, NA)
+  ) %>%
+  fill(edgeSetterId_atFrame, .direction = "updown") %>%
+  ungroup() 
+```
+
+# Create varibles for EIR at max total change of direction
+
+```{r}
+all_data <- all_data %>%
+  group_by(gamePlayId) %>%
+  mutate(
+    max_EIR_atMaxChange = max_EIR_atFrame[which.max(total_change)],
+    edgeSetterId_atMaxChange = edgeSetterId_atFrame[which.max(total_change)],
+    frames_from_start_atMaxChange = frames_from_start[which.max(total_change)]
+  ) %>%
+  ungroup() 
+```
+
+```{r}
+maxChangesEIR <- all_data %>% distinct(gamePlayId, ballCarrierId, edgeSetterId_atMaxChange, frames_from_start_atMaxChange, total_change_at_max_change, max_EIR_atMaxChange)
+```
+
