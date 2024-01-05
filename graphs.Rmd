@@ -17,11 +17,12 @@ Read in processed data files and combine:
 file_pattern <- "^wk[123456789]_processed_data\\.csv$"
 files <- list.files(path = "data", pattern = file_pattern, full.names = TRUE)
 combined_data <- map_df(files, read.csv)
-
-data <- filter(combined_data, frameId == frameId_at_max_change)
-data <- filter(data, nflId == ballCarrierId)
+data <- combined_data %>% 
+  filter(frameId == frameId_at_max_change) %>%
+  filter(nflId == ballCarrierId)
 ```
 
+EDA (to check work)
 
 Histogram of total change (angle change + orientation change)
 ```{r}
@@ -37,6 +38,14 @@ filtered_data <- filter(data, total_change < max_range)
 ```
 
 
+Create buckets for EDA
+```{r}
+bucket_size <- 5
+filtered_data$bucket <- cut(filtered_data$total_change, breaks = seq(0, max_range, bucket_size), 
+                                            labels = FALSE, right = FALSE)
+```
+
+
 Histogram of total change (angle change + orientation change) for each bucket
 ```{r}
 ggplot(data = filtered_data, aes(x = total_change)) +
@@ -44,15 +53,7 @@ ggplot(data = filtered_data, aes(x = total_change)) +
   facet_wrap(~factor(bucket))
 ```
 
-
-Create buckets
-```{r}
-bucket_size <- 5
-filtered_data$bucket <- cut(filtered_data$total_change, breaks = seq(0, max_range, bucket_size), 
-                                            labels = FALSE, right = FALSE)
-```
-
-Get EPA by bucket
+Get average EPA by bucket
 ```{r}
 avg_epa_by_bucket <- filtered_data %>%
   group_by(bucket) %>%
@@ -62,6 +63,117 @@ avg_epa_by_bucket <- filtered_data %>%
   unique()
 ```
 
+
+# Polar coordinate graphs
+
+
+## EPA by total change
+
+```{r}
+plotdf <- data %>% 
+  filter(total_change_at_max_change < 30) %>%
+  select(total_change_at_max_change, expectedPointsAdded) %>%
+  mutate(bucket = cut(total_change_at_max_change, breaks = seq(0, 30, 3))
+         ) %>% 
+  group_by(bucket) %>% 
+  mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", as.character(bucket)))) %>%
+  mutate(meanEPA = mean(expectedPointsAdded))
+```
+
+```{r}
+# Plot
+ggplot(plotdf, aes(x = bucket_angle_min, y = 1, fill = meanEPA)) +
+  geom_col() +
+  coord_polar() +
+  scale_x_continuous(limits = c(0,180)) +
+  scale_y_continuous(limits = c(0,1)) +
+  scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA, na.rm = TRUE)) +
+  labs(title = "Expected Points Added by Greatest Total Change of Direction", subtitle = "For plays where the ball carrier had the highest change in total direction", x = "Total Change", y = "", fill = "EPA") +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        plot.title = element_text(size = 16),
+        plot.subtitle = element_text(size = 12),
+        legend.key.size = unit(1, "cm"))
+```
+
+
+## EPA by relative total change
+
+```{r}
+plotdf <- data %>% 
+  filter(abs(relative_total_change) < 25) %>%
+  select(relative_total_change, expectedPointsAdded) %>%
+  mutate(bucket = cut(relative_total_change, breaks = seq(-25, 25, 5))
+         ) %>% 
+  group_by(bucket) %>% 
+  mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", as.character(bucket))),
+         bucket_angle_max = as.numeric(gsub("\\[|\\]", "", gsub(".*,(.*)\\]", "\\1", as.character(bucket)))),
+         bucket_angle_mean = (bucket_angle_min + bucket_angle_max) / 2) %>%
+  mutate(meanEPA = mean(expectedPointsAdded))
+```
+
+```{r}
+# Plot
+ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
+  geom_col(aes(fill = meanEPA)) +
+  coord_polar(start = 66) +
+  scale_x_continuous(limits = c(-180,180)) +
+  scale_y_continuous(limits = c(0,1)) +
+  labs(title = "EPA by Relative Total Change", x = "Relative Total Change", y = " ", subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
+       fill = "EPA")  +
+  scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA, na.rm = TRUE)) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        plot.title = element_text(size = 16),
+        plot.subtitle = element_text(size = 12),
+        legend.key.size = unit(1, "cm"))
+
+```
+
+
+## EPA of relative total change by play side
+
+```{r}
+plotdf3 <- data %>% 
+  filter(abs(relative_total_change) < 25) %>%
+  select(relative_total_change, expectedPointsAdded, playSide) %>%
+  group_by(playSide) %>%
+  mutate(bucket = cut(relative_total_change, breaks = seq(-25, 25, 15))
+         ) %>%
+  group_by(playSide, bucket) %>%
+  mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", as.character(bucket))),
+         bucket_angle_max = as.numeric(gsub("\\[|\\]", "", gsub(".*,(.*)\\]", "\\1", as.character(bucket)))),
+         bucket_angle_mean = (bucket_angle_min + bucket_angle_max) / 2) %>%
+  mutate(meanEPA = mean(expectedPointsAdded),
+         meanEPA = ifelse(playSide == "left", meanEPA * -1, meanEPA)) %>%
+  mutate(playSidedescr = ifelse(playSide == "left", "Plays to the Left", "Plays to the Right"))
+```
+
+```{r}
+# Plot
+ggplot(plotdf3, aes(x = bucket_angle_mean, y = 1)) +
+  geom_col(aes(fill = meanEPA)) +
+  coord_polar(start = 66) +
+  scale_x_continuous(limits = c(-50,50)) +
+  scale_y_continuous(limits = c(0,1)) +
+  labs(title = "EPA by Direction of Greatest Cut", x = "Greatest Change of Direction", y = " ", subtitle = "Considering the direction of the playside:", fill = "EPA")  +
+  scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf3$meanEPA, na.rm = TRUE)) +
+  facet_wrap(~playSidedescr) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_blank(),
+        plot.title = element_text(size = 16),
+        plot.subtitle = element_text(size = 12),
+        legend.key.size = unit(1, "cm"),
+        strip.text = element_text(size = 18))
+```
 
 
 

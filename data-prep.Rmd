@@ -42,8 +42,12 @@ nfl_field <- function(xlims) {
 }
 ```
 
+
+To run: Change file path on line below. Run everything before last code 
+chunk then run last code chunk to save to your data directory.
+
 ```{r}
-tracking_file <- "data/tracking_week_9.csv"
+tracking_file <- "data/tracking_week_1.csv"
 ```
 
 # Initial data cleaning pass
@@ -652,16 +656,35 @@ angls <- SameDirection_TrackData %>%
     
     # Angle adjusting for cutbacks or bounces (greater than 0 bounce, 360 or less cutback)
     relative_angle = ifelse((playSide == "left" & lead(y, 1, default = NA) < y) |
-                              (playSide == "right" & lead(y, 1, default = NA) > y), (0 - angle) %% 360, angle)
+                              (playSide == "right" & lead(y, 1, default = NA) > y), (0 - angle) %% 360, angle),
+    
+    relative_angle_change = case_when(
+      playSide == "left" & lead(y, 1, default = NA) < y ~ -smallest_angle_diff(relative_angle, lag(relative_angle, 1, default = NA)),
+      playSide == "right" & lead(y, 1, default = NA) > y ~ -smallest_angle_diff(relative_angle, lag(relative_angle, 1, default = NA)),
+      TRUE ~ smallest_angle_diff(relative_angle, lag(relative_angle, 1, default = NA))
+    ),
+    
+    relative_orientation = ifelse(playSide == "left", (o + 180) %% 360,o),
+    relative_orientation_change = smallest_angle_diff(relative_orientation, lag(relative_orientation, 1, default = NA)),
+    relative_total_change = if_else(relative_orientation <= 360 & relative_orientation > 180, 
+                                    relative_angle_change - relative_orientation_change,
+                                    relative_angle_change + relative_orientation_change)
   ) %>%
   ungroup() %>% na.omit() %>%
   # Deal with extremely large orientation changes
   # If orientation change huge, just use angle change
   # Calculate the 99th percentile of angle_change
-  mutate(orientation_change_99th = quantile(orientation_change, 0.99, na.rm = TRUE)) %>%
+  mutate(orientation_change_99th = quantile(orientation_change, 0.99, na.rm = TRUE),
+         relative_orientation_change_99th = quantile(abs(relative_orientation_change), .99, na.rm = TRUE)) %>%
   mutate(
-    total_change = ifelse(orientation_change > orientation_change_99th, angle_change + orientation_change_99th, total_change)
-  ) %>%
+    total_change = ifelse(orientation_change > orientation_change_99th, angle_change + orientation_change_99th, total_change),
+    relative_total_change = case_when(abs(relative_orientation_change) > relative_orientation_change_99th &
+                                        relative_orientation <= 360 & 
+                                        relative_orientation > 180 ~ relative_angle_change - relative_orientation_change_99th,
+                                      abs(relative_orientation_change) > relative_orientation_change_99th &
+                                        relative_orientation <= 180 &
+                                        relative_orientation > 0 ~ relative_angle_change + relative_orientation_change_99th,
+                                      TRUE ~ relative_total_change)) %>%
   select(-orientation_change_99th)
 
 # correlation of angle change and orientation change
@@ -714,6 +737,24 @@ SameDirection_TrackData <- merge(SameDirection_TrackData, full_angle %>% select(
 ```{r}
 # Save dataframe as CSV
 write.csv(SameDirection_TrackData, 
-          file = "data/wk9_processed_data.csv", row.names = FALSE)
+          file = "data/wk1_processed_data.csv", row.names = FALSE)
 ```
+
+Save compiled data frame with a few filtering steps because of space issues.
+
+```{r}
+file_pattern <- "^wk[123456789]_processed_data\\.csv$"
+files <- list.files(path = "data", pattern = file_pattern, full.names = TRUE)
+combined_data <- map_df(files, read.csv)
+data <- combined_data %>% 
+  filter(frameId == frameId_at_max_change)
+
+write.csv(data, 
+          file = "data/all_processed_data.csv", row.names = FALSE)
+```
+
+
+
+
+
 
