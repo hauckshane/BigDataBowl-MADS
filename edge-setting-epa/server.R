@@ -19,6 +19,8 @@ df <- read.csv("all_processed_data.csv")
 max_range <- 30
 n_buckets <- 5
 df <- filter(df, total_change_at_max_change < max_range)
+df <- filter(df, !is.na(expectedPointsAdded))
+df <- filter(df, abs(expectedPointsAdded) <= 5)
 
 # Create subsets of the data for plot purposes
 change_df <- df %>% 
@@ -183,3 +185,4 @@ function(input, output, session) {
     })
 
 }
+
