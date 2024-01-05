@@ -88,7 +88,9 @@ ggplot(plotdf, aes(x = bucket_angle_min, y = 1, fill = meanEPA)) +
   scale_x_continuous(limits = c(0,180)) +
   scale_y_continuous(limits = c(0,1)) +
   scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA, na.rm = TRUE)) +
-  labs(title = "Expected Points Added by Greatest Total Change of Direction", subtitle = "For plays where the ball carrier had the highest change in total direction", x = "Total Change", y = "", fill = "EPA") +
+  labs(title = "Expected Points Added by Greatest Total Change of Direction", 
+       subtitle = "For frames where the ball carrier had the highest change in total direction", 
+       x = "Total Change", y = "", fill = "EPA") +
   theme_minimal() +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -122,7 +124,9 @@ ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
   coord_polar(start = 66) +
   scale_x_continuous(limits = c(-180,180)) +
   scale_y_continuous(limits = c(0,1)) +
-  labs(title = "EPA by Relative Total Change", x = "Relative Total Change", y = " ", subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
+  labs(title = "EPA by Relative Total Change", 
+       x = "Relative Total Change", y = " ", 
+       subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
        fill = "EPA")  +
   scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA, na.rm = TRUE)) +
   theme_minimal() +
