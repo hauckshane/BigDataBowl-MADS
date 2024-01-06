@@ -20,6 +20,8 @@ combined_data <- map_df(files, read.csv)
 data <- combined_data %>% 
   filter(frameId == frameId_at_max_change) %>%
   filter(nflId == ballCarrierId)
+data <- filter(data, !is.na(expectedPointsAdded))
+
 ```
 
 EDA (to check work)
@@ -148,14 +150,14 @@ plotdf3 <- data %>%
   filter(abs(relative_total_change) < 25) %>%
   select(relative_total_change, expectedPointsAdded, playSide) %>%
   group_by(playSide) %>%
+  mutate(relative_total_change = ifelse(playSide == "left", relative_total_change * -1, relative_total_change)) %>%
   mutate(bucket = cut(relative_total_change, breaks = seq(-25, 25, 15))
          ) %>%
   group_by(playSide, bucket) %>%
   mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", as.character(bucket))),
          bucket_angle_max = as.numeric(gsub("\\[|\\]", "", gsub(".*,(.*)\\]", "\\1", as.character(bucket)))),
          bucket_angle_mean = (bucket_angle_min + bucket_angle_max) / 2) %>%
-  mutate(meanEPA = mean(expectedPointsAdded),
-         meanEPA = ifelse(playSide == "left", meanEPA * -1, meanEPA)) %>%
+  mutate(meanEPA = mean(expectedPointsAdded)) %>%
   mutate(playSidedescr = ifelse(playSide == "left", "Plays to the Left", "Plays to the Right"))
 ```
 
