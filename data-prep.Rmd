@@ -562,7 +562,7 @@ SameDirection_TrackData <- merge(SameDirection_TrackData, splitGap, by = "gamePl
 
 
 ```{r}
-# Just the first of tackle, first_contact, touchdown, or out of bounds that occurs
+# Just the first of tackle, first_contact, touchdown, out of bounds or gap intersection that occurs
 triangle_end_point <- SameDirection_TrackData %>%
   filter(nflId == ballCarrierId) %>%
   group_by(gamePlayId) %>%
@@ -656,7 +656,7 @@ angls <- SameDirection_TrackData %>%
     angle_change = abs(angle - lag(angle, 1, default = NA)),
 
     # Calculate the absolute change in orientation between frames
-    orientation_change = smallest_angle_diff(o, lag(o, 1, default = NA)),
+    orientation_change = smallest_angle_diff(o, lead(o, 1, default = NA)),
 
     # Create a composite measure of change
     total_change = angle_change + orientation_change,
@@ -672,7 +672,7 @@ angls <- SameDirection_TrackData %>%
     ),
     
     relative_orientation = ifelse(playSide == "left", (o + 180) %% 360,o),
-    relative_orientation_change = smallest_angle_diff(relative_orientation, lag(relative_orientation, 1, default = NA)),
+    relative_orientation_change = smallest_angle_diff(relative_orientation, lead(relative_orientation, 1, default = NA)),
     relative_total_change = if_else(relative_orientation <= 360 & relative_orientation > 180, 
                                     relative_angle_change - relative_orientation_change,
                                     relative_angle_change + relative_orientation_change)
