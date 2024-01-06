@@ -14,22 +14,31 @@ library(ggplot2)
 
 # Get list of teams
 df <- read.csv("filtered_processed_data.csv")
+team_choices <- sort(unique(df$defensiveTeam))
+opp_choices <- c("League", team_choices)
+type_choices <- c("Defense", "Offense")
 
 fluidPage(
   titlePanel("Company Hiring Activity"),
   sidebarLayout(
     sidebarPanel(
-      selectInput("team", "Choose Team", 
-                  choices = sort(unique(df$defensiveTeam)))
+      selectInput("team", "Choose Your Team", 
+                  choices = team_choices),
+      selectInput("type", "Choose to View Defense or Offense", 
+                  choices = type_choices),
+      selectInput("opp", "Choose Your Opponent", 
+                  choices = opp_choices)
     ),
     mainPanel(
       fluidRow(
-        column(6, plotOutput("change_o")),
-        column(6, plotOutput("change_d"))
+        h1(textOutput("team_header")),
+        column(6, plotOutput("team_change")),
+        column(6, plotOutput("team_playside"))
       ),
       fluidRow(
-        column(6, plotOutput("playside_o")),
-        column(6, plotOutput("playside_d"))
+        h1(textOutput("opp_header")),
+        column(6, plotOutput("opp_change")),
+        column(6, plotOutput("opp_playside"))
       )
     )
   )
