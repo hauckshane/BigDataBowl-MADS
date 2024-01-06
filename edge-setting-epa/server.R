@@ -49,6 +49,9 @@ playside_df <- df %>%
   filter(abs(relative_total_change) < max_range) %>%
   select(relative_total_change, expectedPointsAdded, playSide,
          possessionTeam, defensiveTeam) %>%
+  mutate(relative_total_change = ifelse(playSide == "left", 
+                                        relative_total_change * -1, 
+                                        relative_total_change)) %>%
   group_by(playSide) %>%
   mutate(bucket = cut(relative_total_change, 
                       breaks = seq(-max_range, 
@@ -69,10 +72,8 @@ playside_df <- df %>%
   unique()
 
 # We want the gradients to be all on the same scale
-print(summary(change_df$meanEPA))
 change_midpoint <- mean(change_df$meanEPA)
 playside_midpoint <- mean(playside_df$meanEPA)
-print(summary(playside_df$meanEPA))
 
 
 # Define server logic required to draw reactive polar plots
@@ -221,68 +222,6 @@ function(input, output, session) {
               plot.subtitle = element_text(size = 12),
               legend.key.size = unit(1, "cm"),
               strip.text = element_text(size = 18))
-      
-    })
-
-    
-    # Opponent change plot
-    output$opp_change <- renderPlot({
-      df <- opp_change_df()
-      df <- na.omit(df)
-      
-      ggplot(data = df, aes(x = bucket_angle_mean, y = 1)) +
-        geom_col(aes(fill = meanEPA)) +
-        coord_polar(start = 66) +
-        scale_x_continuous(limits = c(-180,180)) +
-        scale_y_continuous(limits = c(0,1)) +
-        labs(title = paste(opp_type(), "Directional Change of Ball Carrier"), 
-             x = "Directional Change", 
-             y = "", 
-             subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
-             fill = "EPA")  +
-        scale_fill_gradient2(low = unique(df$low_color), 
-                             high = unique(df$high_color), 
-                             midpoint = change_midpoint,
-                             limits = c(-0.25, 0.1)) +
-        theme_minimal() +
-        theme(axis.text.y = element_blank(),
-              axis.ticks.y = element_blank(),
-              axis.text.x = element_text(size = 12),
-              axis.title.x = element_text(size = 14),
-              plot.title = element_text(size = 16),
-              plot.subtitle = element_text(size = 12),
-              legend.key.size = unit(1, "cm"))
-      
-    })
-    
-    # Opponent playside plot
-    output$opp_playside <- renderPlot({
-      df <- opp_playside_df()
-      df <- na.omit(df)
-      
-      ggplot(data = df, aes(x = bucket_angle_mean, y = 1)) +
-        geom_col(aes(fill = meanEPA)) +
-        coord_polar(start = 66) +
-        scale_x_continuous(limits = c(-50,50)) +
-        scale_y_continuous(limits = c(0,1)) +
-        labs(title = paste(opp_type(), "Directional Change of Ball Carrier"), 
-             x = "Directional Change", y = " ", 
-             subtitle = "By Playside", 
-             fill = "EPA")  +
-        scale_fill_gradient2(low = unique(df$low_color), 
-                             high = unique(df$high_color), 
-                             midpoint = playside_midpoint,
-                             limits = c(-0.55, 0.55)) +
-        facet_wrap(~playSidedescr) +
-        theme_minimal() +
-        theme(axis.text.y = element_blank(),
-              axis.ticks.y = element_blank(),
-              axis.text.x = element_blank(),
-              plot.title = element_text(size = 16),
-              plot.subtitle = element_text(size = 12),
-              legend.key.size = unit(1, "cm"),
-              strip.text = element_text(size = 18))
-      
     })
 
 }

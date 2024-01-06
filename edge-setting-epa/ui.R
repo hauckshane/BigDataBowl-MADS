@@ -37,8 +37,8 @@ fluidPage(
       ),
       fluidRow(
         h1(textOutput("opp_header")),
-        column(6, plotOutput("opp_change")),
-        column(6, plotOutput("opp_playside"))
+        #column(6, plotOutput("opp_change")),
+        #column(6, plotOutput("opp_playside"))
       )
     )
   )
