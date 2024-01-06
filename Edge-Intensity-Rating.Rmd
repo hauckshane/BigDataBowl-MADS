@@ -38,7 +38,6 @@ all_data <- all_data %>% filter(total_change_at_max_change < 30)
 all_data <- all_data %>% filter(abs(expectedPointsAdded) <= 6) %>% filter(!is.na(expectedPointsAdded))
 ```
 
-
 # Get information about the ball carrier during time of interest
 ```{r}
 ballcarrier <- all_data %>%
@@ -75,12 +74,14 @@ edgedefenders <- all_data %>%
   group_by(nflId, gamePlayId) %>%
   fill(y_at_5, .direction = c("updown")) %>%
   ungroup() %>%
-  filter(ifelse(playSide == "left", y_at_5 > ballY_preSnap, y_at_5 < ballY_preSnap)) %>%
-  filter(!position %in% c("CB", "DB", "FS", "SS")) %>%
+  filter(ifelse(playSide == "left", y_at_5 > ifelse(ballY_preSnap > 20, ballY_preSnap,26), y_at_5 < ifelse(ballY_preSnap > 20, ballY_preSnap,26))) %>%
   # Calculate player distance from ball carrier
   mutate(distance_from_ballCarrier = sqrt((x - ballCarrier_x)^2 + (y - ballCarrier_y)^2)) %>%
   # Filter players so they are on the playside edge of the ball carrier
   filter(ifelse(playSide == "left", y >= ballCarrier_y, y <= ballCarrier_y)) %>%
+  mutate(numNotDB = sum(!position %in% c("CB", "DB", "FS", "SS"))) %>%
+  filter(ifelse(numNotDB > 0, !position %in% c("CB", "DB", "FS", "SS"), TRUE)) %>%  # Remove cornerbacks and safeties
+  select(-numNotDB) %>%
   # Filter players so they are within 5 yards of ball carrier or is closest player
   #group_by(gamePlayId, frameId) %>%
   #filter(distance_from_ballCarrier <= 5 |
@@ -107,7 +108,8 @@ all_data <- full_join(all_data, edgedefenders %>% select(-c(x,y,s,a, playSide)),
 
 ```{r}
 ballcarrier_edgedefenders <- all_data %>%
-  select(ballCarrierId, colnames(ballcarrier), colnames(edgedefenders), total_change, start_frameId, end_frameId, frameId_at_max_change) %>%
+  select(ballCarrierId, colnames(ballcarrier), colnames(edgedefenders),
+         total_change, start_frameId, end_frameId, frameId_at_max_change) %>%
   filter(frameId >= start_frameId & frameId <= frameId_at_max_change + 1) %>%
   select(-start_frameId, -end_frameId, -frameId_at_max_change) %>%
   mutate(
@@ -257,6 +259,44 @@ all_data <- all_data %>%
     frames_from_start_atMaxChange = frames_from_start[which.max(total_change)]
   ) %>%
   ungroup() 
+
+missing_EIR <- all_data %>% 
+  distinct(gamePlayId, frameId, max_EIR_atFrame, max_EIR_atMaxChange, 
+           edgeSetterId_atFrame,frames_from_start,  total_change, relative_total_change, edge_intensity_rating) %>%
+  filter(is.na(max_EIR_atMaxChange)) %>%
+  filter(!is.na(max_EIR_atFrame)) %>%
+  filter(!is.na(total_change)) %>%
+  # Create a variable for the frameId at which the ball carrier has the most total change of direction and max_EIR_atFrame is not NA
+  group_by(gamePlayId) %>%
+  mutate(
+    frameId_at_max_change = frameId[which.max(total_change)],
+    max_EIR_atMaxChange = max_EIR_atFrame[which.max(total_change)],
+    edgeSetterId_atMaxChange = edgeSetterId_atFrame[which.max(total_change)],
+    frames_from_start_atMaxChange = frames_from_start[which.max(total_change)],
+    total_change_at_max_change = total_change[which.max(total_change)],
+    relative_total_change = relative_total_change[which.max(total_change)]
+  ) %>%
+  distinct(gamePlayId, frameId_at_max_change, max_EIR_atMaxChange, 
+           edgeSetterId_atMaxChange, frames_from_start_atMaxChange, 
+           total_change_at_max_change, relative_total_change) 
+
+all_data <- left_join(all_data, missing_EIR, by = c("gamePlayId")) %>% 
+  mutate(
+    max_EIR_atMaxChange = coalesce(max_EIR_atMaxChange.x, max_EIR_atMaxChange.y),
+    edgeSetterId_atMaxChange = coalesce(edgeSetterId_atMaxChange.x, edgeSetterId_atMaxChange.y),
+    frames_from_start_atMaxChange = coalesce(frames_from_start_atMaxChange.x, frames_from_start_atMaxChange.y),
+    total_change_at_max_change = coalesce(total_change_at_max_change.x, total_change_at_max_change.y),
+    relative_total_change = coalesce(relative_total_change.x, relative_total_change.y),
+    frameId_at_max_change = ifelse(is.na(frameId_at_max_change.y), frameId_at_max_change.x, frameId_at_max_change.y)
+  ) %>%
+  select(-max_EIR_atMaxChange.x, -max_EIR_atMaxChange.y, -edgeSetterId_atMaxChange.x, -edgeSetterId_atMaxChange.y, 
+         -frames_from_start_atMaxChange.x, -frames_from_start_atMaxChange.y, -total_change_at_max_change.x,
+         -total_change_at_max_change.y, -relative_total_change.x, -relative_total_change.y,
+         -frameId_at_max_change.y, -frameId_at_max_change.x) %>%
+  filter(!is.na(max_EIR_atMaxChange))
+
+
+
 ```
 
 ```{r}
@@ -271,7 +311,6 @@ maxChangesEIR <- all_data %>%
 ```{r}
 write.csv(maxChangesEIR, "data/BC_and_ES_information.csv")
 ```
-
 
 
 
@@ -309,7 +348,7 @@ EIR_TC_plot <- maxChangesEIR %>%
   mutate(meanEIR = mean(max_EIR_atMaxChange))
 
 ggplot(EIR_TC_plot, aes(x = bucket_angle_min, y = 1, fill = meanEIR)) +
-  geom_col() +
+  geom_col(color = "lightgrey") +
   coord_polar() +
   scale_x_continuous(limits = c(0,180)) +
   scale_y_continuous(limits = c(0,1)) +
@@ -355,6 +394,20 @@ ggplot(EIR_RTC_plot, aes(x = bucket_angle_min, y = 1, fill = meanEIR)) +
         plot.title = element_text(size = 16),
         plot.subtitle = element_text(size = 12),
         legend.key.size = unit(1, "cm"))
+```
+
+
+```{r}
+maxChangesEIR %>%
+  select(frames_from_start_atMaxChange, expectedPointsAdded) %>%
+  mutate(bucket = cut(frames_from_start_atMaxChange, breaks = seq(min(frames_from_start_atMaxChange), max(frames_from_start_atMaxChange), 3))) %>%
+  group_by(bucket) %>%
+  summarise(n = n(),
+            meanEPA = mean(expectedPointsAdded, na.rm = TRUE)
+         ) %>%
+  ggplot(aes(x = as.factor(frames_from_start_atMaxChange), y = n, fill = meanEPA)) +
+  geom_col()
+  
 ```
 
 
