@@ -261,7 +261,7 @@ all_data <- all_data %>%
 ```{r}
 maxChangesEIR <- all_data %>% 
   filter(frameId == frameId_at_max_change) %>%
-  distinct(gamePlayId, playSide, ballCarrierId, edgeSetterId_atMaxChange, 
+  distinct(gamePlayId, playSide, possessionTeam, ballCarrierId, defensiveTeam, edgeSetterId_atMaxChange, 
            frames_from_start_atMaxChange, total_change_at_max_change, relative_total_change,
            max_EIR_atMaxChange, expectedPointsAdded)
 ``` 
