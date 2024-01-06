@@ -103,5 +103,5 @@ player_table_df <- unique(player_table_df) %>% arrange(possessionTeam, BC_name,
 
 Save df as player_routes_epa.csv
 ```{r}
-write.csv(team_table_df, "edge-setting-epa/team_routes_epa.csv")
+write.csv(player_table_df, "edge-setting-epa/player_routes_epa.csv")
 ```
