@@ -33,21 +33,45 @@ We want to show the mean EPA and frequency for the team's performance on
 inside zone run plays, specifically bounces, dives, and cutbacks.
 
 We define bounces, dives, and cutbacks using relative_total_change:
+
+RIGHT SIDE
 Cutback: < -30, -10)
 Dive: -10, 10)
 Bounce: 10, > 30
 
+LEFT SIDE
+Bounce: < -30, -10)
+Dive: -10, 10)
+Cutback: 10, > 30
+
 Table data needed: team, playSide, type, frequency, meanEPA
 
 ```{r}
-play_types <- c("Cutback", "Dive", "Bounce")
+play_types_R <- c("Cutback", "Dive", "Bounce")
+play_types_L <- c("Bounce", "Dive", "Cutback")
 ranges <- c(-45, -10, 10, 40)
-type_freq <- table(play_types)
+```
 
-team_table_df <- tables_df %>%
+First, add play type based on relative_total_change ranges.
+
+```{r}
+team_table_R <- tables_df %>%
+  filter(playSide == "right") %>%
   # Make a column for play type: type
   mutate(type = cut(relative_total_change, breaks = ranges, 
-                    labels = play_types, include.lowest = TRUE)) %>%
+                    labels = play_types_R, include.lowest = TRUE))
+
+team_table_L <- tables_df %>%
+  filter(playSide == "left") %>%
+  # Make a column for play type: type
+  mutate(type = cut(relative_total_change, breaks = ranges, 
+                    labels = play_types_L, include.lowest = TRUE))
+
+team_table_df <- rbind(team_table_R, team_table_L)
+```
+
+```{r}
+team_table_df <- team_table_df %>%
   # We want frequency at the play side level: for left and right
   group_by(possessionTeam, playSide) %>%
   mutate(n_plays = n()) %>%

@@ -47,7 +47,7 @@ To run: Change file path on line below. Run everything before last code
 chunk then run last code chunk to save to your data directory.
 
 ```{r}
-tracking_file <- "data/tracking_week_9.csv"
+tracking_file <- "data/tracking_week_1.csv"
 ```
 
 # Initial data cleaning pass
@@ -744,7 +744,7 @@ SameDirection_TrackData <- merge(SameDirection_TrackData, full_angle %>% select(
 ```{r}
 # Save dataframe as CSV
 write.csv(SameDirection_TrackData, 
-          file = "data/wk9_processed_data.csv", row.names = FALSE)
+          file = "data/wk1_processed_data.csv", row.names = FALSE)
 ```
 
 Save compiled data frame with a few filtering steps because of space issues.
@@ -764,7 +764,10 @@ write.csv(data,
 ```
 
 
-
+```{r}
+write.csv(data, 
+          file = "edge-setting-epa/filtered_processed_data.csv", row.names = FALSE)
+```
 
 
 
