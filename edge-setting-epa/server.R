@@ -10,6 +10,7 @@
 # Load libraries
 library(shiny)
 library(tidyverse)
+library(gt)
 library(ggplot2)
 
 # Read in the data
@@ -66,8 +67,8 @@ playside_df <- df %>%
   mutate(meanEPA = mean(expectedPointsAdded),
          meanEPA = ifelse(playSide == "left", meanEPA * -1, meanEPA)) %>%
   mutate(playSidedescr = ifelse(playSide == "left", 
-                                "Playside Left", 
-                                "Playside Right")) %>% 
+                                "Left", 
+                                "Right")) %>% 
   unique()
 
 # Set color gradients for defensive plots
@@ -77,7 +78,6 @@ playside_midpoint <- mean(playside_df$meanEPA)
 
 
 # Functions for drawing Defense plots
-
 ## Relative total change plot
 defense_change_plot <- function(plot_df) {
   plot_df <- na.omit(plot_df)
@@ -90,10 +90,10 @@ defense_change_plot <- function(plot_df) {
     labs(title = "Directional Change of Ball Carrier", 
          x = "Directional Change", 
          y = " ", 
-         subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
+         subtitle = "Cutbacks are < 0, Bounces are > 0",
          fill = "EPA")  +
-    scale_fill_gradient2(low = "darkgreen", 
-                         high = "darkred", 
+    scale_fill_gradient2(low = "darkblue", 
+                         high = "firebrick4", 
                          midpoint = change_midpoint,
                          limits = c(-0.25, 0.1)) +
     theme_minimal() +
@@ -121,8 +121,8 @@ defense_playside_plot <- function(plot_df) {
          x = "Directional Change", y = "", 
          subtitle = "By Playside", 
          fill = "EPA")  +
-    scale_fill_gradient2(low = "darkgreen", 
-                         high = "darkred", 
+    scale_fill_gradient2(low = "darkblue", 
+                         high = "firebrick4", 
                          midpoint = playside_midpoint,
                          limits = c(-0.55, 0.55)) +
     facet_wrap(~playSidedescr) +
@@ -142,6 +142,57 @@ defense_playside_plot <- function(plot_df) {
 # Dataframes for Offense tables
 team_df <- read.csv("team_routes_epa.csv")
 player_df <- read.csv("player_routes_epa.csv")
+
+
+# Functions for drawing Offense tables
+## Team table
+team_table <- function(plot_df) {
+  table <- plot_df %>%
+    arrange(desc(meanEPA)) %>%
+    select(playSide, type, freq, meanEPA) %>%
+    gt() %>%
+    fmt_number(
+      columns = c("meanEPA"), 
+      decimals = 2
+    ) %>%
+    data_color(
+      columns = c("meanEPA"),
+      fn = scales::col_numeric(
+        palette = c("lightgreen", "darkgreen"),
+        domain = NULL
+      )
+    ) %>% 
+    tab_header(
+      title = "Team Run Routes"
+    )
+  
+  return(table)
+}
+
+## Player table
+player_table <- function(plot_df) {
+  table <- plot_df %>%
+    arrange(desc(meanEPA)) %>%
+    slice_head(n = 5) %>%
+    select(BC_name, playSide, type, freq, meanEPA) %>%
+    gt() %>%
+    fmt_number(
+      columns = c("meanEPA"), 
+      decimals = 2
+    ) %>%
+    data_color(
+      columns = c("meanEPA"),
+      fn = scales::col_numeric(
+        palette = c("lightgreen", "darkgreen"),
+        domain = NULL
+      )
+    ) %>% 
+    tab_header(
+      title = "Top 5 Player Run Routes"
+    )
+  
+  return(table)
+}
 
 
 ##########################################################
@@ -174,12 +225,12 @@ function(input, output, session) {
   })
   
   # Team header
-  output$team_header <- renderText({ 
+  output$def_header <- renderText({ 
     paste(team(), "Defense")
   })
   
   # Opponent header
-  output$opp_header <- renderText({ 
+  output$off_header <- renderText({ 
     paste(opp(), "Offense")
   })
   
@@ -195,14 +246,14 @@ function(input, output, session) {
     })
 
   # Offense plots
-  output$off_team_table <- renderTable({
+  output$off_team_table <- render_gt({
       df <- offense_team_df()
-      df
+      team_table(df)
     })
   
-  output$off_player_table <- renderTable({
+  output$off_player_table <- render_gt({
       df <- offense_player_df()
-      df
+      player_table(df)
     })
 
 }

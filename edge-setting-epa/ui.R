@@ -10,7 +10,7 @@
 # Load libraries
 library(shiny)
 library(tidyverse)
-library(ggplot2)
+library(gt)
 
 # Get list of teams
 df <- read.csv("filtered_processed_data.csv")
@@ -27,14 +27,14 @@ fluidPage(
     ),
     mainPanel(
       fluidRow(
-        h1(textOutput("Defense_header")),
+        h1(textOutput("def_header")),
         column(6, plotOutput("def_change_plot")),
         column(6, plotOutput("def_playside_plot"))
       ),
       fluidRow(
-        h1(textOutput("opp_header")),
-        column(6, tableOutput("off_team_table")),
-        column(6, tableOutput("off_player_table"))
+        h1(textOutput("off_header")),
+        column(6, gt_output("off_team_table")),
+        column(6, gt_output("off_player_table"))
       )
     )
   )
