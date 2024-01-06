@@ -17,25 +17,27 @@ df <- read.csv("filtered_processed_data.csv")
 team_choices <- sort(unique(df$defensiveTeam))
 
 fluidPage(
-  titlePanel("Company Hiring Activity"),
+  titlePanel("Title here"),
   sidebarLayout(
     sidebarPanel(
       selectInput("team", "Choose Defense Team", 
                   choices = team_choices),
+      uiOutput("team_logo"),
       selectInput("opp", "Choose Offense Team", 
-                  choices = team_choices)
+                  choices = team_choices),
+      uiOutput("opp_logo")
     ),
     mainPanel(
       fluidRow(
-        h1(textOutput("def_header")),
+        h2(textOutput("def_header")),
         column(6, plotOutput("def_change_plot")),
         column(6, plotOutput("def_playside_plot"))
       ),
       fluidRow(
-        h1(textOutput("off_header")),
+        h2(textOutput("off_header")),
         column(6, gt_output("off_team_table_left")),
         column(6, gt_output("off_team_table_right"))
-      )
+      ),
     )
   )
 )

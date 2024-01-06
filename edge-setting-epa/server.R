@@ -12,13 +12,15 @@ library(shiny)
 library(tidyverse)
 library(gt)
 library(ggplot2)
+library(nflfastR)
 
 # Read in the data
 df <- read.csv("filtered_processed_data.csv")
 
 # Set the relative_total_change range for viewing graphs
 max_range <- 30
-n_buckets <- 3
+n_buckets <- 5
+n_buckets_playside <- 3
 df <- filter(df, total_change_at_max_change < max_range)
 df <- filter(df, !is.na(expectedPointsAdded))
 # Remove outliers
@@ -56,7 +58,7 @@ playside_df <- df %>%
   mutate(bucket = cut(relative_total_change, 
                       breaks = seq(-max_range, 
                                    max_range, 
-                                   (max_range * 2) / n_buckets)))%>%
+                                   (max_range * 2) / n_buckets_playside)))%>%
   group_by(playSide, bucket) %>%
   mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", 
                                            as.character(bucket))),
@@ -71,6 +73,7 @@ playside_df <- df %>%
                                 "Right")) %>% 
   unique()
 
+
 # Set color gradients for defensive plots
 ## We want the gradients to be all on the same scale
 change_midpoint <- mean(change_df$meanEPA)
@@ -83,14 +86,13 @@ defense_change_plot <- function(plot_df) {
   plot_df <- na.omit(plot_df)
   
   plot <- ggplot(data = plot_df, aes(x = bucket_angle_mean, y = 1)) +
-    geom_col(aes(fill = meanEPA), color = "black") +
+    geom_col(aes(fill = meanEPA)) +
     coord_polar(start = 66) +
     scale_x_continuous(limits = c(-180,180)) +
     scale_y_continuous(limits = c(0,1)) +
     labs(title = "Directional Change of Ball Carrier", 
          x = "Directional Change", 
-         y = " ", 
-         subtitle = "Cutbacks are < 0, Bounces are > 0",
+         y = " ",
          fill = "EPA")  +
     scale_fill_gradient2(low = "darkblue", 
                          high = "firebrick4", 
@@ -113,13 +115,12 @@ defense_playside_plot <- function(plot_df) {
   plot_df <- na.omit(plot_df)
   
   plot <- ggplot(data = plot_df, aes(x = bucket_angle_mean, y = 1)) +
-    geom_col(aes(fill = meanEPA), color = "black") +
+    geom_col(aes(fill = meanEPA)) +
     coord_polar(start = 66) +
     scale_x_continuous(limits = c(-50,50)) +
     scale_y_continuous(limits = c(0,1)) +
-    labs(title = "Directional Change of Ball Carrier", 
-         x = "Directional Change", y = "", 
-         subtitle = "By Playside", 
+    labs(title = "Playside View of Directional Change", 
+         x = "Directional Change", y = "",
          fill = "EPA")  +
     scale_fill_gradient2(low = "darkblue", 
                          high = "firebrick4", 
@@ -207,6 +208,29 @@ function(input, output, session) {
   # Team is Defense, Opponent is Offense
   team <- reactive({input$team})
   opp <- reactive({input$opp})
+  
+  # Get the logos
+  logo_df <- nflfastR::teams_colors_logos
+
+  get_team_logo <- reactive({
+    logo_df %>%
+    filter(team_abbr == input$team) %>%
+    pull(team_logo_espn)
+  })
+  
+  output$team_logo <- renderUI({
+    img(src = get_team_logo(), width = "150px", height = "150px")
+  })
+  
+  get_opp_logo <- reactive({
+    logo_df %>%
+      filter(team_abbr == input$opp) %>%
+      pull(team_logo_espn)
+  })
+  
+  output$opp_logo <- renderUI({
+    img(src = get_opp_logo(), width = "150px", height = "150px")
+  })
   
   # Filter the dataframes based on user input choices
   ## Defense plot dataframes
