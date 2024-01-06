@@ -1,0 +1,28 @@
+---
+title: "Tables"
+author: "Shane Hauck"
+date: "2024-01-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+BC_ES_data <- read_csv("data/BC_and_ES_information.csv") %>% select(-1)
+players <- read_csv("data/players.csv")
+
+tables_df <- left_join(BC_ES_data, players %>% select(nflId, position, displayName), by = c("ballCarrierId" = "nflId")) %>%
+  rename(BC_position = position, BC_name = displayName) %>%
+  left_join(players %>% select(nflId, position, displayName), by = c("edgeSetterId_atMaxChange" = "nflId")) %>%
+  rename(ES_position = position, ES_name = displayName) 
+```
+
+
+
