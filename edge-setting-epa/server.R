@@ -15,7 +15,7 @@ library(ggplot2)
 # Read in the data
 df <- read.csv("filtered_processed_data.csv")
 
-# Set the change range for viewing graphs
+# Set the relative_total_change range for viewing graphs
 max_range <- 30
 n_buckets <- 5
 df <- filter(df, total_change_at_max_change < max_range)
@@ -23,9 +23,8 @@ df <- filter(df, !is.na(expectedPointsAdded))
 # Remove outliers
 df <- filter(df, abs(expectedPointsAdded) <= 5)
 
-# Create subsets of the data for plot purposes
-
-## Dataframe for relative total change plots
+# Dataframes for Defense plots
+## Relative total change plots
 change_df <- df %>% 
   filter(abs(relative_total_change) < max_range) %>%
   select(relative_total_change, expectedPointsAdded, 
@@ -44,7 +43,7 @@ change_df <- df %>%
   mutate(meanEPA = mean(expectedPointsAdded)) %>% 
   unique()
 
-## Dataframe for playside plots
+## Playside plots
 playside_df <- df %>% 
   filter(abs(relative_total_change) < max_range) %>%
   select(relative_total_change, expectedPointsAdded, playSide,
@@ -71,157 +70,139 @@ playside_df <- df %>%
                                 "Playside Right")) %>% 
   unique()
 
-# We want the gradients to be all on the same scale
+# Set color gradients for defensive plots
+## We want the gradients to be all on the same scale
 change_midpoint <- mean(change_df$meanEPA)
 playside_midpoint <- mean(playside_df$meanEPA)
 
 
-# Define server logic required to draw reactive polar plots
+# Functions for drawing Defense plots
+
+## Relative total change plot
+defense_change_plot <- function(plot_df) {
+  plot_df <- na.omit(plot_df)
+  
+  plot <- ggplot(data = plot_df, aes(x = bucket_angle_mean, y = 1)) +
+    geom_col(aes(fill = meanEPA)) +
+    coord_polar(start = 66) +
+    scale_x_continuous(limits = c(-180,180)) +
+    scale_y_continuous(limits = c(0,1)) +
+    labs(title = "Directional Change of Ball Carrier", 
+         x = "Directional Change", 
+         y = " ", 
+         subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
+         fill = "EPA")  +
+    scale_fill_gradient2(low = "darkgreen", 
+                         high = "darkred", 
+                         midpoint = change_midpoint,
+                         limits = c(-0.25, 0.1)) +
+    theme_minimal() +
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.text.x = element_text(size = 12),
+          axis.title.x = element_text(size = 14),
+          plot.title = element_text(size = 16),
+          plot.subtitle = element_text(size = 12),
+          legend.key.size = unit(1, "cm"))
+  
+  return(plot)
+}
+
+## Playside plot
+defense_playside_plot <- function(plot_df) {
+  plot_df <- na.omit(plot_df)
+  
+  plot <- ggplot(data = plot_df, aes(x = bucket_angle_mean, y = 1)) +
+    geom_col(aes(fill = meanEPA)) +
+    coord_polar(start = 66) +
+    scale_x_continuous(limits = c(-50,50)) +
+    scale_y_continuous(limits = c(0,1)) +
+    labs(title = "Directional Change of Ball Carrier", 
+         x = "Directional Change", y = "", 
+         subtitle = "By Playside", 
+         fill = "EPA")  +
+    scale_fill_gradient2(low = "darkgreen", 
+                         high = "darkred", 
+                         midpoint = playside_midpoint,
+                         limits = c(-0.55, 0.55)) +
+    facet_wrap(~playSidedescr) +
+    theme_minimal() +
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.text.x = element_blank(),
+          plot.title = element_text(size = 16),
+          plot.subtitle = element_text(size = 12),
+          legend.key.size = unit(1, "cm"),
+          strip.text = element_text(size = 18))
+  
+  return(plot)
+}
+
+
+# Dataframes for Offense tables
+team_df <- read.csv("team_routes_epa.csv")
+player_df <- read.csv("player_routes_epa.csv")
+
+
+##########################################################
+
+# Define server logic required to draw reactive plots and views
 function(input, output, session) {
   
-  # Filter the dataframes based on user input choices
-  team_change_df <- reactive({
-    if(input$type == "Defense"){
-      change_df$low_color <- "darkgreen"
-      change_df$high_color <- "darkred"
-      filter(change_df, defensiveTeam == input$team)
-    } else{ # Offense
-      change_df$low_color <- "darkred"
-      change_df$high_color <- "darkgreen"
-      filter(change_df, possessionTeam == input$team)
-    }
-  })
-  
-  team_playside_df <- reactive({
-      if(input$type == "Defense"){
-        playside_df$low_color <- "darkgreen"
-        playside_df$high_color <- "darkred"
-        filter(playside_df, defensiveTeam == input$team)
-      } else{ # Offense
-        playside_df$low_color <- "darkred"
-        playside_df$high_color <- "darkgreen"
-        filter(playside_df, possessionTeam == input$team)
-      }
-  })
-  
-  opp_change_df <- reactive({
-    if(input$type == "Defense"){
-      # Show the opposite type
-      # Offense
-      change_df$low_color <- "darkred"
-      change_df$high_color <- "darkgreen"
-      if(input$type != "League"){
-        filter(change_df, possessionTeam == input$team)
-      } else{
-        change_df
-      }
-    } else{
-      # Defense
-      change_df$low_color <- "darkgreen"
-      change_df$high_color <- "darkred"
-      if(input$type != "League"){
-        filter(change_df, possessionTeam == input$team)
-      } else{
-        change_df
-      }
-    }
-  })
-  
-  opp_playside_df <- reactive({
-    if(input$type == "Defense"){
-      # Show the opposite type
-      # Offense
-      playside_df$low_color <- "darkred"
-      playside_df$high_color <- "darkgreen"
-      if(input$type != "League"){
-        filter(playside_df, possessionTeam == input$team)
-      } else{
-        playside_df
-      }
-    } else{
-      # Defense
-      playside_df$low_color <- "darkgreen"
-      playside_df$high_color <- "darkred"
-      if(input$type != "League"){
-        filter(playside_df, possessionTeam == input$team)
-      } else{
-        playside_df
-      }
-    }
-  })
-  
+  # Get teams from user input
+  # Team is Defense, Opponent is Offense
   team <- reactive({input$team})
   opp <- reactive({input$opp})
-  team_type <- reactive({input$type})
-  opp_type <- reactive({ifelse(input$type == "Defense", "Offense", "Defense")})
+  
+  # Filter the dataframes based on user input choices
+  ## Defense plot dataframes
+  defense_change_df <- reactive({
+    filter(change_df, defensiveTeam == input$team)
+  })
+  
+  defense_playside_df <- reactive({
+    filter(playside_df, defensiveTeam == input$team)
+  })
+  
+  ## Offense table dataframes
+  offense_team_df <- reactive({
+    filter(team_df, possessionTeam == input$opp)
+  })
+  
+  offense_player_df <- reactive({
+    filter(player_df, possessionTeam == input$opp)
+  })
   
   # Team header
   output$team_header <- renderText({ 
-    paste(team(), team_type())
+    paste(team(), "Defense")
   })
   
   # Opponent header
   output$opp_header <- renderText({ 
-    paste(opp(), opp_type())
+    paste(opp(), "Offense")
   })
   
-  # Team change plot
-    output$team_change <- renderPlot({
-      df <- team_change_df()
-      df <- na.omit(df)
-
-      ggplot(data = df, aes(x = bucket_angle_mean, y = 1)) +
-        geom_col(aes(fill = meanEPA)) +
-        coord_polar(start = 66) +
-        scale_x_continuous(limits = c(-180,180)) +
-        scale_y_continuous(limits = c(0,1)) +
-        labs(title = paste(team_type(), "Directional Change of Ball Carrier"), 
-             x = "Directional Change", 
-             y = " ", 
-             subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
-             fill = "EPA")  +
-        scale_fill_gradient2(low = unique(df$low_color), 
-                             high = unique(df$high_color), 
-                             midpoint = change_midpoint,
-                             limits = c(-0.25, 0.1)) +
-        theme_minimal() +
-        theme(axis.text.y = element_blank(),
-              axis.ticks.y = element_blank(),
-              axis.text.x = element_text(size = 12),
-              axis.title.x = element_text(size = 14),
-              plot.title = element_text(size = 16),
-              plot.subtitle = element_text(size = 12),
-              legend.key.size = unit(1, "cm"))
-
+  # Defense plots
+  output$def_change_plot <- renderPlot({
+      df <- defense_change_df()
+      defense_change_plot(df)
     })
-    
-    # Team playside plot
-    output$team_playside <- renderPlot({
-      df <- team_playside_df()
-      df <- na.omit(df)
-      
-      ggplot(data = df, aes(x = bucket_angle_mean, y = 1)) +
-        geom_col(aes(fill = meanEPA)) +
-        coord_polar(start = 66) +
-        scale_x_continuous(limits = c(-50,50)) +
-        scale_y_continuous(limits = c(0,1)) +
-        labs(title = paste(team_type(), "Directional Change of Ball Carrier"), 
-             x = "Directional Change", y = "", 
-             subtitle = "By Playside", 
-             fill = "EPA")  +
-        scale_fill_gradient2(low = unique(df$low_color), 
-                             high = unique(df$high_color), 
-                             midpoint = playside_midpoint,
-                             limits = c(-0.55, 0.55)) +
-        facet_wrap(~playSidedescr) +
-        theme_minimal() +
-        theme(axis.text.y = element_blank(),
-              axis.ticks.y = element_blank(),
-              axis.text.x = element_blank(),
-              plot.title = element_text(size = 16),
-              plot.subtitle = element_text(size = 12),
-              legend.key.size = unit(1, "cm"),
-              strip.text = element_text(size = 18))
+  
+  output$def_playside_plot <- renderPlot({
+      df <- defense_playside_df()
+      defense_playside_plot(df)
+    })
+
+  # Offense plots
+  output$off_team_table <- renderTable({
+      df <- offense_team_df()
+      df
+    })
+  
+  output$off_player_table <- renderTable({
+      df <- offense_player_df()
+      df
     })
 
 }
