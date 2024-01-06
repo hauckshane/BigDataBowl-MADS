@@ -76,6 +76,7 @@ edgedefenders <- all_data %>%
   fill(y_at_5, .direction = c("updown")) %>%
   ungroup() %>%
   filter(ifelse(playSide == "left", y_at_5 > ballY_preSnap, y_at_5 < ballY_preSnap)) %>%
+  filter(!position %in% c("CB", "DB", "FS", "SS")) %>%
   # Calculate player distance from ball carrier
   mutate(distance_from_ballCarrier = sqrt((x - ballCarrier_x)^2 + (y - ballCarrier_y)^2)) %>%
   # Filter players so they are on the playside edge of the ball carrier
