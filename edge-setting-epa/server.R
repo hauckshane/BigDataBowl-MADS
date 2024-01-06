@@ -81,43 +81,71 @@ function(input, output, session) {
   # Filter the dataframes based on user input choices
   team_change_df <- reactive({
     if(input$type == "Defense"){
+      change_df$low_color <- "darkgreen"
+      change_df$high_color <- "darkred"
       filter(change_df, defensiveTeam == input$team)
-    } else{
+    } else{ # Offense
+      change_df$low_color <- "darkred"
+      change_df$high_color <- "darkgreen"
       filter(change_df, possessionTeam == input$team)
     }
   })
   
   team_playside_df <- reactive({
       if(input$type == "Defense"){
+        playside_df$low_color <- "darkgreen"
+        playside_df$high_color <- "darkred"
         filter(playside_df, defensiveTeam == input$team)
-      } else{
+      } else{ # Offense
+        playside_df$low_color <- "darkred"
+        playside_df$high_color <- "darkgreen"
         filter(playside_df, possessionTeam == input$team)
       }
   })
   
   opp_change_df <- reactive({
-    if(input$opp != "League"){
-      if(input$type == "Defense"){
-        # Show the opposite type
+    if(input$type == "Defense"){
+      # Show the opposite type
+      # Offense
+      change_df$low_color <- "darkred"
+      change_df$high_color <- "darkgreen"
+      if(input$type != "League"){
         filter(change_df, possessionTeam == input$team)
       } else{
-        filter(change_df, defensiveTeam == input$team)
+        change_df
       }
-    } else {
-      change_df
+    } else{
+      # Defense
+      change_df$low_color <- "darkgreen"
+      change_df$high_color <- "darkred"
+      if(input$type != "League"){
+        filter(change_df, possessionTeam == input$team)
+      } else{
+        change_df
+      }
     }
   })
   
   opp_playside_df <- reactive({
-    if(input$opp != "League"){
-      if(input$type == "Defense"){
-        # Show the opposite type
+    if(input$type == "Defense"){
+      # Show the opposite type
+      # Offense
+      playside_df$low_color <- "darkred"
+      playside_df$high_color <- "darkgreen"
+      if(input$type != "League"){
         filter(playside_df, possessionTeam == input$team)
       } else{
-        filter(playside_df, defensiveTeam == input$team)
+        playside_df
       }
-    } else {
-      playside_df
+    } else{
+      # Defense
+      playside_df$low_color <- "darkgreen"
+      playside_df$high_color <- "darkred"
+      if(input$type != "League"){
+        filter(playside_df, possessionTeam == input$team)
+      } else{
+        playside_df
+      }
     }
   })
   
@@ -151,8 +179,8 @@ function(input, output, session) {
              y = " ", 
              subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
              fill = "EPA")  +
-        scale_fill_gradient2(low = "darkblue", 
-                             high = "firebrick4", 
+        scale_fill_gradient2(low = unique(df$low_color), 
+                             high = unique(df$high_color), 
                              midpoint = change_midpoint,
                              limits = c(-0.25, 0.1)) +
         theme_minimal() +
@@ -180,8 +208,8 @@ function(input, output, session) {
              x = "Directional Change", y = "", 
              subtitle = "By Playside", 
              fill = "EPA")  +
-        scale_fill_gradient2(low = "darkblue", 
-                             high = "firebrick4", 
+        scale_fill_gradient2(low = unique(df$low_color), 
+                             high = unique(df$high_color), 
                              midpoint = playside_midpoint,
                              limits = c(-0.55, 0.55)) +
         facet_wrap(~playSidedescr) +
@@ -212,8 +240,8 @@ function(input, output, session) {
              y = "", 
              subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
              fill = "EPA")  +
-        scale_fill_gradient2(low = "darkblue", 
-                             high = "firebrick4", 
+        scale_fill_gradient2(low = unique(df$low_color), 
+                             high = unique(df$high_color), 
                              midpoint = change_midpoint,
                              limits = c(-0.25, 0.1)) +
         theme_minimal() +
@@ -241,8 +269,8 @@ function(input, output, session) {
              x = "Directional Change", y = " ", 
              subtitle = "By Playside", 
              fill = "EPA")  +
-        scale_fill_gradient2(low = "darkblue", 
-                             high = "firebrick4", 
+        scale_fill_gradient2(low = unique(df$low_color), 
+                             high = unique(df$high_color), 
                              midpoint = playside_midpoint,
                              limits = c(-0.55, 0.55)) +
         facet_wrap(~playSidedescr) +
