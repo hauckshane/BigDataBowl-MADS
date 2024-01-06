@@ -17,7 +17,7 @@ df <- read.csv("filtered_processed_data.csv")
 team_choices <- sort(unique(df$defensiveTeam))
 
 fluidPage(
-  titlePanel("Title here"),
+  titlePanel("Setting the Edge and Directional Report of Rushers"),
   sidebarLayout(
     sidebarPanel(
       selectInput("team", "Choose Defense Team", 

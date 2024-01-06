@@ -19,7 +19,7 @@ df <- read.csv("filtered_processed_data.csv")
 
 # Set the relative_total_change range for viewing graphs
 max_range <- 30
-n_buckets <- 5
+n_buckets <- 6
 n_buckets_playside <- 3
 df <- filter(df, total_change_at_max_change < max_range)
 df <- filter(df, !is.na(expectedPointsAdded))
@@ -102,7 +102,7 @@ defense_change_plot <- function(plot_df) {
   plot_df <- na.omit(plot_df)
   
   plot <- ggplot(data = plot_df, aes(x = bucket_angle_mean, y = 1)) +
-    geom_col(aes(fill = meanEPA)) +
+    geom_col(aes(fill = meanEPA), color = "black") +
     coord_polar(start = 66) +
     scale_x_continuous(limits = c(-180,180)) +
     scale_y_continuous(limits = c(0,1)) +
@@ -142,7 +142,7 @@ defense_playside_plot <- function(plot_df) {
   print(select(plot_df, playSide, relative_total_change, mode_type))
   
   plot <- ggplot(data = plot_df, aes(x = bucket_angle_mean, y = 1)) +
-    geom_col(aes(fill = meanEPA)) +
+    geom_col(aes(fill = meanEPA), color = "black") +
     coord_polar(start = 66) +
     scale_x_continuous(limits = c(-50,50)) +
     scale_y_continuous(limits = c(0,1)) +
