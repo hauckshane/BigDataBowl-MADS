@@ -83,7 +83,7 @@ defense_change_plot <- function(plot_df) {
   plot_df <- na.omit(plot_df)
   
   plot <- ggplot(data = plot_df, aes(x = bucket_angle_mean, y = 1)) +
-    geom_col(aes(fill = meanEPA)) +
+    geom_col(aes(fill = meanEPA), color = "black") +
     coord_polar(start = 66) +
     scale_x_continuous(limits = c(-180,180)) +
     scale_y_continuous(limits = c(0,1)) +
@@ -113,7 +113,7 @@ defense_playside_plot <- function(plot_df) {
   plot_df <- na.omit(plot_df)
   
   plot <- ggplot(data = plot_df, aes(x = bucket_angle_mean, y = 1)) +
-    geom_col(aes(fill = meanEPA)) +
+    geom_col(aes(fill = meanEPA), color = "black") +
     coord_polar(start = 66) +
     scale_x_continuous(limits = c(-50,50)) +
     scale_y_continuous(limits = c(0,1)) +
@@ -139,31 +139,35 @@ defense_playside_plot <- function(plot_df) {
 }
 
 
-# Dataframes for Offense tables
+# Dataframe for Offense tables
 team_df <- read.csv("team_routes_epa.csv")
+team_df$freq <- round(team_df$freq, 2)
+# Make pretty column names
+names(team_df) <- c("X", "Team", "Playside", "Run Type", "Num. Plays", 
+                    "Num. Plays for Type", "Frequency", "Average EPA")
 
 
 # Functions for drawing Offense tables
 ## Team table
 team_table_left <- function(plot_df) {
   table <- plot_df %>%
-    filter(playSide == "left") %>%
-    arrange(desc(type)) %>%
-    select(type, freq, meanEPA) %>%
+    filter(Playside == "left") %>%
+    arrange(desc('Run Type')) %>%
+    select('Run Type', 'Frequency', 'Average EPA') %>%
     gt() %>%
     fmt_number(
-      columns = c("meanEPA"), 
+      columns = c("Average EPA"), 
       decimals = 2
     ) %>%
     data_color(
-      columns = c("meanEPA"),
+      columns = c("Average EPA"),
       fn = scales::col_numeric(
-        palette = c("lightgreen", "darkgreen"),
+        palette = c("lightblue", "darkblue"),
         domain = NULL
       )
     ) %>% 
     tab_header(
-      title = "Left Run Routes"
+      title = "Runs to the Left"
     )
   
   return(table)
@@ -171,23 +175,23 @@ team_table_left <- function(plot_df) {
 
 team_table_right <- function(plot_df) {
   table <- plot_df %>%
-    filter(playSide == "right") %>%
-    arrange(desc(type)) %>%
-    select(type, freq, meanEPA) %>%
+    filter(Playside == "right") %>%
+    arrange(desc('Run Type')) %>%
+    select('Run Type', 'Frequency', 'Average EPA') %>%
     gt() %>%
     fmt_number(
-      columns = c("meanEPA"), 
+      columns = c("Average EPA"), 
       decimals = 2
     ) %>%
     data_color(
-      columns = c("meanEPA"),
+      columns = c("Average EPA"),
       fn = scales::col_numeric(
-        palette = c("lightgreen", "darkgreen"),
+        palette = c("lightblue", "darkblue"),
         domain = NULL
       )
     ) %>% 
     tab_header(
-      title = "Right Run Routes"
+      title = "Runs to the Right"
     )
   
   return(table)
@@ -216,11 +220,11 @@ function(input, output, session) {
   
   ## Offense table dataframes
   offense_team_df <- reactive({
-    filter(team_df, possessionTeam == input$opp)
+    filter(team_df, Team == input$opp)
   })
   
   offense_player_df <- reactive({
-    filter(player_df, possessionTeam == input$opp)
+    filter(player_df, Team == input$opp)
   })
   
   # Team header
