@@ -51,9 +51,6 @@ playside_df <- df %>%
   filter(abs(relative_total_change) < max_range) %>%
   select(relative_total_change, expectedPointsAdded, playSide,
          possessionTeam, defensiveTeam) %>%
-  mutate(relative_total_change = ifelse(playSide == "left", 
-                                        relative_total_change * -1, 
-                                        relative_total_change)) %>%
   group_by(playSide) %>%
   mutate(bucket = cut(relative_total_change, 
                       breaks = seq(-max_range, 
@@ -74,13 +71,23 @@ playside_df <- df %>%
   unique()
 
 # To label cutbacks, dives, and bounces
-play_types <- c("C", "D", "B")
+play_types_R <- c("C", "D", "B")
+play_types_L <- c("B", "D", "C")
 ranges <- c(-45, -10, 10, 40)
 
-playside_df <- playside_df %>%
+playside_df_R <- playside_df %>%
+  filter(playSide == "right") %>%
   # Make a column for play type: type
   mutate(type = cut(relative_total_change, breaks = ranges, 
-                    labels = play_types, include.lowest = TRUE))
+                    labels = play_types_R, include.lowest = TRUE))
+
+playside_df_L <- playside_df %>%
+  filter(playSide == "left") %>%
+  # Make a column for play type: type
+  mutate(type = cut(relative_total_change, breaks = ranges, 
+                    labels = play_types_L, include.lowest = TRUE))
+
+playside_df <- rbind(playside_df_R, playside_df_L)
 
 
 # Set color gradients for defensive plots
