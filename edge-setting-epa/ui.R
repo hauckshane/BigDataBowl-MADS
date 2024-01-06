@@ -33,8 +33,8 @@ fluidPage(
       ),
       fluidRow(
         h1(textOutput("off_header")),
-        column(6, gt_output("off_team_table")),
-        column(6, gt_output("off_player_table"))
+        column(6, gt_output("off_team_table_left")),
+        column(6, gt_output("off_team_table_right"))
       )
     )
   )

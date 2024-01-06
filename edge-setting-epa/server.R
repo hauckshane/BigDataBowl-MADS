@@ -18,7 +18,7 @@ df <- read.csv("filtered_processed_data.csv")
 
 # Set the relative_total_change range for viewing graphs
 max_range <- 30
-n_buckets <- 5
+n_buckets <- 3
 df <- filter(df, total_change_at_max_change < max_range)
 df <- filter(df, !is.na(expectedPointsAdded))
 # Remove outliers
@@ -141,15 +141,15 @@ defense_playside_plot <- function(plot_df) {
 
 # Dataframes for Offense tables
 team_df <- read.csv("team_routes_epa.csv")
-player_df <- read.csv("player_routes_epa.csv")
 
 
 # Functions for drawing Offense tables
 ## Team table
-team_table <- function(plot_df) {
+team_table_left <- function(plot_df) {
   table <- plot_df %>%
-    arrange(desc(meanEPA)) %>%
-    select(playSide, type, freq, meanEPA) %>%
+    filter(playSide == "left") %>%
+    arrange(desc(type)) %>%
+    select(type, freq, meanEPA) %>%
     gt() %>%
     fmt_number(
       columns = c("meanEPA"), 
@@ -163,18 +163,17 @@ team_table <- function(plot_df) {
       )
     ) %>% 
     tab_header(
-      title = "Team Run Routes"
+      title = "Left Run Routes"
     )
   
   return(table)
 }
 
-## Player table
-player_table <- function(plot_df) {
+team_table_right <- function(plot_df) {
   table <- plot_df %>%
-    arrange(desc(meanEPA)) %>%
-    slice_head(n = 5) %>%
-    select(BC_name, playSide, type, freq, meanEPA) %>%
+    filter(playSide == "right") %>%
+    arrange(desc(type)) %>%
+    select(type, freq, meanEPA) %>%
     gt() %>%
     fmt_number(
       columns = c("meanEPA"), 
@@ -188,7 +187,7 @@ player_table <- function(plot_df) {
       )
     ) %>% 
     tab_header(
-      title = "Top 5 Player Run Routes"
+      title = "Right Run Routes"
     )
   
   return(table)
@@ -246,15 +245,15 @@ function(input, output, session) {
     })
 
   # Offense plots
-  output$off_team_table <- render_gt({
+  output$off_team_table_left <- render_gt({
       df <- offense_team_df()
-      team_table(df)
+      team_table_left(df)
     })
   
-  output$off_player_table <- render_gt({
-      df <- offense_player_df()
-      player_table(df)
-    })
+  output$off_team_table_right <- render_gt({
+    df <- offense_team_df()
+    team_table_right(df)
+  })
 
 }
 

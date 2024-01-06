@@ -71,37 +71,40 @@ Save df as team_routes_epa.csv
 write.csv(team_table_df, "edge-setting-epa/team_routes_epa.csv")
 ```
 
-## Player Offense View
 
-We want to show "players to watch", i.e. the offense team's runningbacks 
-and how effective they are for different routes on inside zone run plays.
+<!-- ## Player Offense View -->
 
-Table data needed: team, BC_name, playSide, type, meanEPA, most_common_route
+<!-- We want to show "players to watch", i.e. the offense team's runningbacks  -->
+<!-- and how effective they are for different routes on inside zone run plays. -->
 
-```{r}
-player_table_df <- tables_df %>%
-  # Make a column for play type: type
-  mutate(type = cut(relative_total_change, breaks = ranges, 
-                    labels = play_types, include.lowest = TRUE)) %>%
-  group_by(BC_name, playSide) %>%
-  # Make a column for player play type frequency for each side
-  mutate(n_plays = n()) %>%
-  group_by(BC_name, playSide, type) %>%
-  mutate(n_plays_type = n()) %>%
-  mutate(freq = n_plays_type / n_plays)
+<!-- Table data needed: team, BC_name, playSide, type, meanEPA, most_common_route -->
 
-player_table_df <- player_table_df %>%
-  # Make column for mean EPA for each team's play type on left and right
-  group_by(BC_name, type, playSide) %>%
-  mutate(meanEPA = mean(expectedPointsAdded)) %>%
-  # Select only columns we need
-  select(possessionTeam, BC_name, playSide, type, n_plays, n_plays_type, freq, meanEPA)
+<!-- ```{r} -->
+<!-- player_table_df <- tables_df %>% -->
+<!--   # Make a column for play type: type -->
+<!--   mutate(type = cut(relative_total_change, breaks = ranges,  -->
+<!--                     labels = play_types, include.lowest = TRUE)) %>% -->
+<!--   group_by(BC_name, playSide) %>% -->
+<!--   # Make a column for player play type frequency for each side -->
+<!--   mutate(n_plays = n()) %>% -->
+<!--   group_by(BC_name, playSide, type) %>% -->
+<!--   mutate(n_plays_type = n()) %>% -->
+<!--   mutate(freq = n_plays_type / n_plays) -->
 
-player_table_df <- unique(player_table_df) %>% arrange(possessionTeam, BC_name, 
-                                                       playSide, type)
-```
+<!-- player_table_df <- player_table_df %>% -->
+<!--   # Make column for mean EPA for each team's play type on left and right -->
+<!--   group_by(BC_name, type, playSide) %>% -->
+<!--   mutate(meanEPA = mean(expectedPointsAdded)) %>% -->
+<!--   # Select only columns we need -->
+<!--   select(possessionTeam, BC_name, BC_position, playSide, type,  -->
+<!--          n_plays, n_plays_type, freq, meanEPA) -->
 
-Save df as player_routes_epa.csv
-```{r}
-write.csv(player_table_df, "edge-setting-epa/player_routes_epa.csv")
-```
+<!-- player_table_df <- unique(player_table_df) %>% arrange(possessionTeam, BC_name,  -->
+<!--                                                        playSide, type) -->
+<!-- ``` -->
+
+<!-- Save df as player_routes_epa.csv -->
+<!-- ```{r} -->
+<!-- write.csv(player_table_df, "edge-setting-epa/player_routes_epa.csv") -->
+<!-- ``` -->
+
