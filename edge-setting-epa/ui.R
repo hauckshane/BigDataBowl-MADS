@@ -24,7 +24,7 @@ fluidPage(
     sidebarPanel(
       selectInput("team", "Choose Your Team", 
                   choices = team_choices),
-      selectInput("type", "Choose to View Defense or Offense", 
+      selectInput("type", "View Defense or Offense", 
                   choices = type_choices),
       selectInput("opp", "Choose Your Opponent", 
                   choices = opp_choices)

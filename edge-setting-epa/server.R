@@ -64,8 +64,8 @@ playside_df <- df %>%
   mutate(meanEPA = mean(expectedPointsAdded),
          meanEPA = ifelse(playSide == "left", meanEPA * -1, meanEPA)) %>%
   mutate(playSidedescr = ifelse(playSide == "left", 
-                                "Plays to the Left", 
-                                "Plays to the Right")) %>% 
+                                "Playside Left", 
+                                "Playside Right")) %>% 
   unique()
 
 # We want the gradients to be all on the same scale
@@ -146,8 +146,8 @@ function(input, output, session) {
         coord_polar(start = 66) +
         scale_x_continuous(limits = c(-180,180)) +
         scale_y_continuous(limits = c(0,1)) +
-        labs(title = paste(team_type(), "EPA by Relative Total Change"), 
-             x = "Relative Total Change", 
+        labs(title = paste(team_type(), "Directional Change of Ball Carrier"), 
+             x = "Directional Change", 
              y = " ", 
              subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
              fill = "EPA")  +
@@ -176,9 +176,9 @@ function(input, output, session) {
         coord_polar(start = 66) +
         scale_x_continuous(limits = c(-50,50)) +
         scale_y_continuous(limits = c(0,1)) +
-        labs(title = paste(team_type(), "EPA by Direction of Greatest Cut"), 
-             x = "Greatest Change of Direction", y = "", 
-             subtitle = "Considering the direction of the playside:", 
+        labs(title = paste(team_type(), "Directional Change of Ball Carrier"), 
+             x = "Directional Change", y = "", 
+             subtitle = "By Playside", 
              fill = "EPA")  +
         scale_fill_gradient2(low = "darkblue", 
                              high = "firebrick4", 
@@ -207,8 +207,8 @@ function(input, output, session) {
         coord_polar(start = 66) +
         scale_x_continuous(limits = c(-180,180)) +
         scale_y_continuous(limits = c(0,1)) +
-        labs(title = paste(opp_type(), "EPA by Relative Total Change"), 
-             x = "Relative Total Change", 
+        labs(title = paste(opp_type(), "Directional Change of Ball Carrier"), 
+             x = "Directional Change", 
              y = "", 
              subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
              fill = "EPA")  +
@@ -237,9 +237,9 @@ function(input, output, session) {
         coord_polar(start = 66) +
         scale_x_continuous(limits = c(-50,50)) +
         scale_y_continuous(limits = c(0,1)) +
-        labs(title = paste(opp_type(), "EPA by Direction of Greatest Cut"), 
-             x = "Greatest Change of Direction", y = " ", 
-             subtitle = "Considering the direction of the playside:", 
+        labs(title = paste(opp_type(), "Directional Change of Ball Carrier"), 
+             x = "Directional Change", y = " ", 
+             subtitle = "By Playside", 
              fill = "EPA")  +
         scale_fill_gradient2(low = "darkblue", 
                              high = "firebrick4", 
