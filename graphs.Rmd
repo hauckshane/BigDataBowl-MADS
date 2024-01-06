@@ -150,7 +150,6 @@ plotdf3 <- data %>%
   filter(abs(relative_total_change) < 25) %>%
   select(relative_total_change, expectedPointsAdded, playSide) %>%
   group_by(playSide) %>%
-  mutate(relative_total_change = ifelse(playSide == "left", relative_total_change * -1, relative_total_change)) %>%
   mutate(bucket = cut(relative_total_change, breaks = seq(-25, 25, 15))
          ) %>%
   group_by(playSide, bucket) %>%
