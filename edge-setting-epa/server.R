@@ -73,6 +73,15 @@ playside_df <- df %>%
                                 "Right")) %>% 
   unique()
 
+# To label cutbacks, dives, and bounces
+play_types <- c("C", "D", "B")
+ranges <- c(-45, -10, 10, 40)
+
+playside_df <- playside_df %>%
+  # Make a column for play type: type
+  mutate(type = cut(relative_total_change, breaks = ranges, 
+                    labels = play_types, include.lowest = TRUE))
+
 
 # Set color gradients for defensive plots
 ## We want the gradients to be all on the same scale
@@ -114,6 +123,17 @@ defense_change_plot <- function(plot_df) {
 defense_playside_plot <- function(plot_df) {
   plot_df <- na.omit(plot_df)
   
+  # Calculate the mode type for each section
+  mode_data <- plot_df %>%
+    group_by(bucket_angle_mean, playSidedescr) %>%
+    summarise(mode_type = names(which.max(table(type)))) %>%
+    ungroup()
+  
+  # Merge the mode_data back to the plot_df
+  plot_df <- left_join(plot_df, mode_data, 
+                       by = c("bucket_angle_mean", "playSidedescr"))
+  print(select(plot_df, playSide, relative_total_change, mode_type))
+  
   plot <- ggplot(data = plot_df, aes(x = bucket_angle_mean, y = 1)) +
     geom_col(aes(fill = meanEPA)) +
     coord_polar(start = 66) +
@@ -121,7 +141,11 @@ defense_playside_plot <- function(plot_df) {
     scale_y_continuous(limits = c(0,1)) +
     labs(title = "Playside View of Directional Change", 
          x = "Directional Change", y = "",
-         fill = "EPA")  +
+         fill = "EPA",
+         subtitle = "Showing Cutbacks, Dives, Bounces")  +
+    geom_text(aes(label = mode_type), 
+              position = position_stack(vjust = 0.5), 
+              color = "black", size = 3) +
     scale_fill_gradient2(low = "darkblue", 
                          high = "firebrick4", 
                          midpoint = playside_midpoint,
