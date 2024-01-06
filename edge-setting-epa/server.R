@@ -19,7 +19,7 @@ df <- read.csv("filtered_processed_data.csv")
 
 # Set the relative_total_change range for viewing graphs
 max_range <- 30
-n_buckets <- 6
+n_buckets <- 7
 n_buckets_playside <- 3
 df <- filter(df, total_change_at_max_change < max_range)
 df <- filter(df, !is.na(expectedPointsAdded))
@@ -139,7 +139,6 @@ defense_playside_plot <- function(plot_df) {
   # Merge the mode_data back to the plot_df
   plot_df <- left_join(plot_df, mode_data, 
                        by = c("bucket_angle_mean", "playSidedescr"))
-  print(select(plot_df, playSide, relative_total_change, mode_type))
   
   plot <- ggplot(data = plot_df, aes(x = bucket_angle_mean, y = 1)) +
     geom_col(aes(fill = meanEPA), color = "black") +
@@ -174,6 +173,7 @@ defense_playside_plot <- function(plot_df) {
 # Dataframe for Offense tables
 team_df <- read.csv("team_routes_epa.csv")
 team_df$freq <- round(team_df$freq, 2)
+print(summary(team_df$meanEPA))
 # Make pretty column names
 names(team_df) <- c("X", "Team", "Playside", "Run Type", "Num. Plays", 
                     "Num. Plays for Type", "Frequency", "Average EPA")
