@@ -35,7 +35,7 @@ all_data <- all_data %>% filter(total_change_at_max_change < 30)
 
 # Filter out unusual EPA
 ```{r}
-all_data <- all_data %>% filter(abs(expectedPointsAdded) <= 6) %>% filter(!is.na(expectPointsAdded))
+all_data <- all_data %>% filter(abs(expectedPointsAdded) <= 6) %>% filter(!is.na(expectedPointsAdded))
 ```
 
 
@@ -261,17 +261,11 @@ all_data <- all_data %>%
 ```{r}
 maxChangesEIR <- all_data %>% 
   filter(frameId == frameId_at_max_change) %>%
-  distinct(gamePlayId, ballCarrierId, edgeSetterId_atMaxChange, 
+  distinct(gamePlayId, playSide, ballCarrierId, edgeSetterId_atMaxChange, 
            frames_from_start_atMaxChange, total_change_at_max_change, relative_total_change,
            max_EIR_atMaxChange, expectedPointsAdded)
 ``` 
 
-# Filter out really large EPA
-```{r}
-maxChangesEIR <- maxChangesEIR %>%
-  # as well as one random NA value
-  na.omit()
-```
 
 
 
