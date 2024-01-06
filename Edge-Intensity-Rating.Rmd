@@ -267,6 +267,10 @@ maxChangesEIR <- all_data %>%
 ``` 
 
 
+```{r}
+write.csv(maxChangesEIR, "data/BC_and_ES_information.csv")
+```
+
 
 
 
