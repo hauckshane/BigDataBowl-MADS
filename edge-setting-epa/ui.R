@@ -31,7 +31,7 @@ fluidPage(
       ")
     )
   ),
-  titlePanel("Setting the Edge: Comparing team’s directional performances"),
+  titlePanel("Setting the Edge: Comparing team directional performances"),
   sidebarLayout(
     sidebarPanel(
       selectInput("team", "Choose Defense Team", 
@@ -43,7 +43,7 @@ fluidPage(
       #### Readme Text ####
       h4("Defense View"),
       h5("Directional Change Plots"),
-      p("The key idea is that setting the edge forces ball carriers to change direction, making it easier for the defense to stop them with a tackle. The color of each slice in the plot represents average EPA for different ranges of total directional change. We also have the directional change split by playside, where we can see the average EPA of ball carrier movements made against the team's defense. A darker purple color indicates a lower EPA, which is better for the defense. The Playside View has cutbacks, dives, and bounces labeled as C, D, B respectively."),
+      p("The key idea is that setting the edge forces ball carriers to change direction, making it easier for the defense to stop them with a tackle. The color of each slice in the plot represents average EPA for different ranges of total directional change, relative to the side of the play. We also have the directional change split by playside, where we can see the average EPA of ball carrier movements made against the team's defense. A darker purple color indicates a lower EPA, which is better for the defense. The Playside View has cutbacks, dives, and bounces labeled as C, D, B respectively."),
       h5("Top Edge Setters Tables"),
       p("The defense view tables show the top 5 players most frequently setting the edge during zone run plays for each playside. Here we have the Edge Intensity Rating (EIR) also displayed. EIR is a metric that takes into consideration how the defense reacts to the ball carrier's movement and vice versa. A higher EIR means a better edge is set. We have the average EIR for plays where the specific player is setting the edge, the average time in seconds until the player sets the edge, and the average EPA of plays where that player is setting the edge. A darker color indicates a lower EPA, which is better for the defense."),
       h4("Offense View"),
