@@ -9,6 +9,10 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(gganimate)
+library(ggplot2)
+library(magick)
+library(cowplot)
+library(grid)
 theme_set(theme_bw())
 ```
 
@@ -83,15 +87,20 @@ plotdf <- data %>%
 ```
 
 ```{r}
+# Read the football field image
+football_field <- image_read("Untitled.png")
+
+# Replace the checkerboard pattern with white color
+football_field <- image_scale(football_field, "200%")
 # Plot
-ggplot(plotdf, aes(x = bucket_angle_min, y = 1, fill = meanEPA)) +
+plot <- ggplot(plotdf, aes(x = bucket_angle_min, y = 1, fill = meanEPA)) +
   geom_col() +
   coord_polar() +
   scale_x_continuous(limits = c(0,180)) +
   scale_y_continuous(limits = c(0,1)) +
   scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA, na.rm = TRUE)) +
-  labs(title = "Expected Points Added by Greatest Total Change of Direction", 
-       subtitle = "For frames where the ball carrier had the highest change in total direction", 
+  labs(title = "Expected Points Added", 
+       subtitle = "By a ball carrier's highest change in angular direction (0 = no change, 50 = right, 150 = left", 
        x = "Total Change", y = "", fill = "EPA") +
   theme_minimal() +
   theme(axis.text.y = element_blank(),
@@ -101,6 +110,14 @@ ggplot(plotdf, aes(x = bucket_angle_min, y = 1, fill = meanEPA)) +
         plot.title = element_text(size = 16),
         plot.subtitle = element_text(size = 12),
         legend.key.size = unit(1, "cm"))
+
+# Create a plot with the football field background
+plot_with_background <- ggdraw() +
+  draw_image(football_field, scale = 1) +
+  draw_plot(plot)
+
+# Display the plot
+plot_with_background
 ```
 
 
@@ -120,8 +137,13 @@ plotdf <- data %>%
 ```
 
 ```{r}
+# Read the football field image
+football_field <- image_read("Untitled.png")
+
+# Replace the checkerboard pattern with white color
+football_field <- image_scale(football_field, "200%")
 # Plot
-ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
+plot <- ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
   geom_col(aes(fill = meanEPA)) +
   coord_polar(start = 66) +
   scale_x_continuous(limits = c(-180,180)) +
@@ -139,6 +161,14 @@ ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
         plot.title = element_text(size = 16),
         plot.subtitle = element_text(size = 12),
         legend.key.size = unit(1, "cm"))
+
+# Create a plot with the football field background
+plot_with_background <- ggdraw() +
+  draw_image(football_field, scale = 1) +
+  draw_plot(plot)
+
+# Display the plot
+plot_with_background
 
 ```
 
@@ -160,24 +190,41 @@ plotdf3 <- data %>%
   mutate(playSidedescr = ifelse(playSide == "left", "Plays to the Left", "Plays to the Right"))
 ```
 
+
+
+
+
 ```{r}
-# Plot
-ggplot(plotdf3, aes(x = bucket_angle_mean, y = 1)) +
+# Read the football field image
+football_field <- image_read("Untitled.png")
+
+# Replace the checkerboard pattern with white color
+football_field <- image_scale(football_field, "200%")
+
+# Plot 4
+plot <- ggplot(plotdf3, aes(x = bucket_angle_mean, y = 1)) +
   geom_col(aes(fill = meanEPA)) +
   coord_polar(start = 66) +
-  scale_x_continuous(limits = c(-50,50)) +
-  scale_y_continuous(limits = c(0,1)) +
-  labs(title = "EPA by Direction of Greatest Cut", x = "Greatest Change of Direction", y = " ", subtitle = "Considering the direction of the playside:", fill = "EPA")  +
+  scale_x_continuous(limits = c(-50, 50)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(title = "EPA by Direction of Greatest Cut", x = "", y = " ", subtitle = "Considering the direction of the playside:", fill = "EPA") +
   scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf3$meanEPA, na.rm = TRUE)) +
-  facet_wrap(~playSidedescr) +
+  facet_wrap(~playSidedescr, strip.position = "top", nrow = 1) +
   theme_minimal() +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.text.x = element_blank(),
-        plot.title = element_text(size = 16),
+        plot.title = element_text(size = 16, margin = margin(t = 10)),
         plot.subtitle = element_text(size = 12),
-        legend.key.size = unit(1, "cm"),
-        strip.text = element_text(size = 18))
+        strip.text = element_text(size = 12, margin = margin(t=25)))
+
+# Create a plot with the football field background
+plot_with_background <- ggdraw() +
+  draw_image(football_field, scale = 1) +
+  draw_plot(plot)
+
+# Display the plot
+plot_with_background
 ```
 
 
