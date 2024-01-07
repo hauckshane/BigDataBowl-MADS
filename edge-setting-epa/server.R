@@ -265,7 +265,7 @@ team_table_left <- function(plot_df) {
     data_color(
       columns = c("Avg EPA"),
       fn = scales::col_numeric(
-        palette = c("lightblue", "darkblue"),
+        palette = c("pink", "darkred"),
         domain = NULL
       )
     ) %>% 
@@ -289,7 +289,7 @@ team_table_right <- function(plot_df) {
     data_color(
       columns = c("Avg EPA"),
       fn = scales::col_numeric(
-        palette = c("lightblue", "darkblue"),
+        palette = c("pink", "darkred"),
         domain = NULL
       )
     ) %>% 
