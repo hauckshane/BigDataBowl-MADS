@@ -24,6 +24,47 @@ tables_df <- left_join(BC_ES_data, players %>% select(nflId, position, displayNa
   rename(ES_position = position, ES_name = displayName) 
 ```
 
+# Making tables for the Shiny app Defense view
+
+We want to show top edge setters for a team based on the EIR metric.
+
+Table needs:
+playSide, defensiveTeam, ES_name, setting_freq, meanTime, meanEIR, meanEPA
+
+```{r}
+# Make a time variable: 1 frame = 10ms, 10 frames = 1 sec
+eir_df <- tables_df %>%
+  mutate(time = frames_from_start_atMaxChange / 10)
+
+# How often the player is setting the edge for their team
+eir_df <- eir_df %>%
+  group_by(defensiveTeam, playSide) %>%
+  mutate(n_plays = n()) %>%
+  group_by(defensiveTeam, playSide, ES_name) %>%
+  mutate(n_player_plays = n()) %>%
+  group_by(ES_name) %>%
+  mutate(setting_freq = n_player_plays / n_plays)
+
+# Average EIR and EPA for each player when they are setting the edge
+eir_df <- eir_df %>%
+  group_by(playSide, ES_name) %>%
+  mutate(meanEIR = mean(max_EIR_atMaxChange), 
+         meanEPA = mean(expectedPointsAdded),
+         meanTime = mean(time))
+
+# Select only the values we want for the table
+eir_df <- eir_df %>%
+  select(defensiveTeam, ES_name, playSide, n_plays, n_player_plays,
+         setting_freq, meanTime, meanEIR, meanEPA) %>%
+  unique() %>%
+  arrange(defensiveTeam, playSide, ES_name)
+```
+
+Save df as eir_epa.csv
+```{r}
+write.csv(eir_df, "edge-setting-epa/eir_epa.csv")
+```
+
 
 # Making tables for the Shiny app Offense view
 

@@ -17,6 +17,20 @@ df <- read.csv("filtered_processed_data.csv")
 team_choices <- sort(unique(df$defensiveTeam))
 
 fluidPage(
+  tags$head(
+    tags$style(
+      HTML("
+        h2 {
+          text-align: center;
+        }
+      "),
+      HTML("
+        h3 {
+          text-align: center;
+        }
+      ")
+    )
+  ),
   titlePanel("Setting the Edge: Comparing team’s directional performances"),
   sidebarLayout(
     sidebarPanel(
@@ -32,6 +46,11 @@ fluidPage(
         h2(textOutput("def_header")),
         column(6, plotOutput("def_change_plot")),
         column(6, plotOutput("def_playside_plot"))
+      ),
+      fluidRow(
+        h3("Top Edge Setters"),
+        column(6, gt_output("eir_table_left")),
+        column(6, gt_output("eir_table_right"))
       ),
       fluidRow(
         h2(textOutput("off_header")),

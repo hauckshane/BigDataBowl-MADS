@@ -14,8 +14,18 @@ library(gt)
 library(ggplot2)
 library(nflfastR)
 
-# Read in the data
+# Read in the data for Defense plots and tables
 df <- read.csv("filtered_processed_data.csv")
+eir_df <- read.csv("eir_epa.csv")
+# Round values to 2 decimal places
+eir_df$setting_freq <- round(eir_df$setting_freq, 2)
+eir_df$pretty_freq <- paste0(eir_df$setting_freq * 100, "%")
+eir_df$meanEIR <- round(eir_df$meanEIR, 2)
+eir_df$meanTime <- round(eir_df$meanTime, 2)
+# Make pretty column names
+names(eir_df) <- c("X", "Team", "Name", "Playside", "Num. Plays",
+                   "Num. Plays for Player", "prop", "Avg Time",
+                   "Avg EIR", "Avg EPA", "Setting Freq")
 
 # Set the relative_total_change range for viewing graphs
 max_range <- 30
@@ -169,14 +179,73 @@ defense_playside_plot <- function(plot_df) {
   return(plot)
 }
 
+## EIR left table
+eir_table_left <- function(plot_df) {
+  plot_df <- plot_df %>%
+    filter(Playside == "left")
+  
+  plot_df <- plot_df[order(-plot_df$prop), ]
+  
+  table <- plot_df %>%
+    head(5) %>%
+    select('Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA') %>%
+    gt() %>%
+    fmt_number(
+      columns = c("Avg EPA"), 
+      decimals = 2
+    ) %>%
+    data_color(
+      columns = c("Avg EPA"),
+      fn = scales::col_numeric(
+        palette = c("darkblue", "lightblue"),
+        domain = NULL
+      )
+    ) %>% 
+    tab_header(
+      title = "Left Edge Setters"
+    )
+  
+  return(table)
+}
+
+## EIR right table
+eir_table_right <- function(plot_df) {
+  plot_df <- plot_df %>%
+    filter(Playside == "right")
+  
+  plot_df <- plot_df[order(-plot_df$prop), ]
+  
+  table <- plot_df %>%
+    head(5) %>%
+    select('Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA') %>%
+    gt() %>%
+    fmt_number(
+      columns = c("Avg EPA"), 
+      decimals = 2
+    ) %>%
+    data_color(
+      columns = c("Avg EPA"),
+      fn = scales::col_numeric(
+        palette = c("darkblue", "lightblue"),
+        domain = NULL
+      )
+    ) %>% 
+    tab_header(
+      title = "Right Edge Setters"
+    )
+  
+  return(table)
+}
+
 
 # Dataframe for Offense tables
 team_df <- read.csv("team_routes_epa.csv")
+# Round values to 2 decimal places
 team_df$freq <- round(team_df$freq, 2)
-print(summary(team_df$meanEPA))
+team_df$pretty_freq <- paste0(team_df$freq * 100, "%")
 # Make pretty column names
 names(team_df) <- c("X", "Team", "Playside", "Run Type", "Num. Plays", 
-                    "Num. Plays for Type", "Frequency", "Average EPA")
+                    "Num. Plays for Type", "prop", "Avg EPA", "Frequency")
 
 
 # Functions for drawing Offense tables
@@ -185,14 +254,14 @@ team_table_left <- function(plot_df) {
   table <- plot_df %>%
     filter(Playside == "left") %>%
     arrange(desc('Run Type')) %>%
-    select('Run Type', 'Frequency', 'Average EPA') %>%
+    select('Run Type', 'Frequency', 'Avg EPA') %>%
     gt() %>%
     fmt_number(
-      columns = c("Average EPA"), 
+      columns = c("Avg EPA"), 
       decimals = 2
     ) %>%
     data_color(
-      columns = c("Average EPA"),
+      columns = c("Avg EPA"),
       fn = scales::col_numeric(
         palette = c("lightblue", "darkblue"),
         domain = NULL
@@ -209,14 +278,14 @@ team_table_right <- function(plot_df) {
   table <- plot_df %>%
     filter(Playside == "right") %>%
     arrange(desc('Run Type')) %>%
-    select('Run Type', 'Frequency', 'Average EPA') %>%
+    select('Run Type', 'Frequency', 'Avg EPA') %>%
     gt() %>%
     fmt_number(
-      columns = c("Average EPA"), 
+      columns = c("Avg EPA"), 
       decimals = 2
     ) %>%
     data_color(
-      columns = c("Average EPA"),
+      columns = c("Avg EPA"),
       fn = scales::col_numeric(
         palette = c("lightblue", "darkblue"),
         domain = NULL
@@ -273,6 +342,11 @@ function(input, output, session) {
     filter(playside_df, defensiveTeam == input$team)
   })
   
+  ## Defense EIR table dataframe
+  eir_table_df <- reactive({
+    filter(eir_df, Team == input$team)
+  })
+  
   ## Offense table dataframes
   offense_team_df <- reactive({
     filter(team_df, Team == input$opp)
@@ -292,7 +366,7 @@ function(input, output, session) {
     paste(opp(), "Offense")
   })
   
-  # Defense plots
+  # Defense polar plots
   output$def_change_plot <- renderPlot({
       df <- defense_change_df()
       defense_change_plot(df)
@@ -302,6 +376,17 @@ function(input, output, session) {
       df <- defense_playside_df()
       defense_playside_plot(df)
     })
+  
+  # Defense EIR tables
+  output$eir_table_left <- render_gt({
+    df <- eir_table_df()
+    eir_table_left(df)
+  })
+  
+  output$eir_table_right <- render_gt({
+    df <- eir_table_df()
+    eir_table_right(df)
+  })
 
   # Offense plots
   output$off_team_table_left <- render_gt({
