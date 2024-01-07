@@ -9,12 +9,32 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(gganimate)
-library(ggplot2)
-library(magick)
-library(cowplot)
-library(grid)
 theme_set(theme_bw())
 ```
+
+```{r}
+library(sportyR)
+field_params <- list(
+  field_apron = "#bebebe",
+  field_border = "#bebebe",
+  offensive_endzone = "#bebebe",
+  defensive_endzone = "#bebebe",
+  offensive_half = "#bebebe",
+  defensive_half = "#bebebe"
+)
+
+nfl_field <- function(xlims) {
+  geom_football(
+    league = "nfl",
+    display_range = "full",
+    x_trans = 60,
+    y_trans = 26.6667,
+    xlims = xlims,
+    color_updates = field_params
+  )
+}
+```
+
 
 Read in processed data files and combine:
 ```{r}
@@ -87,20 +107,15 @@ plotdf <- data %>%
 ```
 
 ```{r}
-# Read the football field image
-football_field <- image_read("Untitled.png")
-
-# Replace the checkerboard pattern with white color
-football_field <- image_scale(football_field, "200%")
 # Plot
-plot <- ggplot(plotdf, aes(x = bucket_angle_min, y = 1, fill = meanEPA)) +
+ggplot(plotdf, aes(x = bucket_angle_min, y = 1, fill = meanEPA)) +
   geom_col() +
   coord_polar() +
   scale_x_continuous(limits = c(0,180)) +
   scale_y_continuous(limits = c(0,1)) +
   scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA, na.rm = TRUE)) +
-  labs(title = "Expected Points Added", 
-       subtitle = "By a ball carrier's highest change in angular direction (0 = no change, 50 = right, 150 = left", 
+  labs(title = "Expected Points Added by Greatest Total Change of Direction", 
+       subtitle = "For frames where the ball carrier had the highest change in total direction", 
        x = "Total Change", y = "", fill = "EPA") +
   theme_minimal() +
   theme(axis.text.y = element_blank(),
@@ -110,24 +125,21 @@ plot <- ggplot(plotdf, aes(x = bucket_angle_min, y = 1, fill = meanEPA)) +
         plot.title = element_text(size = 16),
         plot.subtitle = element_text(size = 12),
         legend.key.size = unit(1, "cm"))
-
-# Create a plot with the football field background
-plot_with_background <- ggdraw() +
-  draw_image(football_field, scale = 1) +
-  draw_plot(plot)
-
-# Display the plot
-plot_with_background
 ```
 
 
 ## EPA by relative total change
 
 ```{r}
-plotdf <- data %>% 
+BC_ES <- read_csv("data/BC_and_ES_information.csv")
+```
+
+
+```{r}
+plotdf <- BC_ES %>% 
   filter(abs(relative_total_change) < 25) %>%
   select(relative_total_change, expectedPointsAdded) %>%
-  mutate(bucket = cut(relative_total_change, breaks = seq(-25, 25, 5))
+  mutate(bucket = cut(relative_total_change, breaks = seq(-25, 25, 7))
          ) %>% 
   group_by(bucket) %>% 
   mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", as.character(bucket))),
@@ -137,14 +149,9 @@ plotdf <- data %>%
 ```
 
 ```{r}
-# Read the football field image
-football_field <- image_read("Untitled.png")
-
-# Replace the checkerboard pattern with white color
-football_field <- image_scale(football_field, "200%")
 # Plot
-plot <- ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
-  geom_col(aes(fill = meanEPA)) +
+ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
+  geom_col(aes(fill = meanEPA), color = "darkgrey") +
   coord_polar(start = 66) +
   scale_x_continuous(limits = c(-180,180)) +
   scale_y_continuous(limits = c(0,1)) +
@@ -152,7 +159,8 @@ plot <- ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
        x = "Relative Total Change", y = " ", 
        subtitle = "Values < 0 are Cutbacks, Values > 0 are Bounces",
        fill = "EPA")  +
-  scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA, na.rm = TRUE)) +
+  scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf$meanEPA, na.rm = TRUE),
+                       limits = c(-0.55, 0.55)) +
   theme_minimal() +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -160,15 +168,7 @@ plot <- ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
         axis.title.x = element_text(size = 14),
         plot.title = element_text(size = 16),
         plot.subtitle = element_text(size = 12),
-        legend.key.size = unit(1, "cm"))
-
-# Create a plot with the football field background
-plot_with_background <- ggdraw() +
-  draw_image(football_field, scale = 1) +
-  draw_plot(plot)
-
-# Display the plot
-plot_with_background
+        legend.key.size = unit(1, "cm")) 
 
 ```
 
@@ -190,43 +190,102 @@ plotdf3 <- data %>%
   mutate(playSidedescr = ifelse(playSide == "left", "Plays to the Left", "Plays to the Right"))
 ```
 
-
-
-
-
 ```{r}
-# Read the football field image
-football_field <- image_read("Untitled.png")
-
-# Replace the checkerboard pattern with white color
-football_field <- image_scale(football_field, "200%")
-
-# Plot 4
-plot <- ggplot(plotdf3, aes(x = bucket_angle_mean, y = 1)) +
+# Plot
+ggplot(plotdf3, aes(x = bucket_angle_mean, y = 1)) +
   geom_col(aes(fill = meanEPA)) +
   coord_polar(start = 66) +
-  scale_x_continuous(limits = c(-50, 50)) +
-  scale_y_continuous(limits = c(0, 1)) +
-  labs(title = "EPA by Direction of Greatest Cut", x = "", y = " ", subtitle = "Considering the direction of the playside:", fill = "EPA") +
+  scale_x_continuous(limits = c(-50,50)) +
+  scale_y_continuous(limits = c(0,1)) +
+  labs(title = "EPA by Direction of Greatest Cut", x = "Greatest Change of Direction", y = " ", subtitle = "Considering the direction of the playside:", fill = "EPA")  +
   scale_fill_gradient2(low = "darkblue", high = "firebrick4", midpoint = mean(plotdf3$meanEPA, na.rm = TRUE)) +
-  facet_wrap(~playSidedescr, strip.position = "top", nrow = 1) +
+  facet_wrap(~playSidedescr) +
   theme_minimal() +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.text.x = element_blank(),
-        plot.title = element_text(size = 16, margin = margin(t = 10)),
+        plot.title = element_text(size = 16),
         plot.subtitle = element_text(size = 12),
-        strip.text = element_text(size = 12, margin = margin(t=25)))
+        legend.key.size = unit(1, "cm"),
+        strip.text = element_text(size = 18))
+```
 
-# Create a plot with the football field background
-plot_with_background <- ggdraw() +
-  draw_image(football_field, scale = 1) +
-  draw_plot(plot)
 
-# Display the plot
-plot_with_background
+# Animation for Angle Change
+
+```{r}
+
+combined_data <- read_csv("data/all_processed_data.csv")
 ```
 
 
 
+```{r}
+# Your existing code for preparing animation_data
+animation_data <- combined_data %>% filter(gamePlayId == "2022100910 2460")
+
+# Frame where you want to pause
+pause_frame <- animation_data$frameId_at_max_change[1]
+
+# Number of times to duplicate the pause frame (5 seconds * fps)
+fps <- 10 # frames per second
+pause_length <- fps * 5 
+
+
+# Duplicate the pause frame and create increasing frameIds
+pause_data <- animation_data %>% filter(frameId == pause_frame) %>% filter(nflId == ballCarrierId | nflId == edgeSetterId_atFrame)
+pause_data_replicated <- pause_data %>%
+  slice(rep(1, pause_length)) %>%
+  mutate(frameId = frameId + 0:(pause_length - 1))
+
+# Adjust frameId for subsequent frames in original data
+animation_data <- animation_data %>%
+  mutate(frameId = ifelse(frameId > pause_frame, frameId + pause_length, frameId))
+
+# Combine the original and duplicated frames
+animation_data <- bind_rows(animation_data, pause_data_replicated)
+
+# Sort the data by frameId
+animation_data <- animation_data %>% arrange(frameId)
+
+# Create the plot
+p <- nfl_field(c(0, 120)) +
+  geom_point(
+    data = animation_data, aes(x = x, y = y, color = club),
+    show.legend = FALSE,
+    size = 2
+  ) +
+  geom_point(
+    data = animation_data %>% filter(nflId == ballCarrierId), aes(x = x, y = y),
+    color = "brown4",
+    show.legend = FALSE,
+    size = 2
+  ) +
+  geom_hline(data = animation_data %>% filter(nflId == edgeSetterId_atFrame), 
+             aes(yintercept = y), color = "darkblue") +
+  geom_hline(data = animation_data %>% filter(nflId == edgeSetterId_atMaxChange) %>% filter(frameId <= 3), 
+             aes(yintercept = y), color = "darkblue") +
+  geom_point(
+    data = animation_data %>% filter(nflId == edgeSetterId_atFrame), aes(x = x, y = y),
+    color = "darkblue",
+    show.legend = FALSE,
+    size = 2 + (animation_data %>% filter(nflId == edgeSetterId_atFrame) %>% 
+                  mutate(EIRscale = (edge_intensity_rating / 100)*2) %>% select(EIRscale) %>% pull())
+  ) +
+  # When frameId is less than 5 make edgeSetterId_at_max_change increase in size
+  geom_point(
+    data = animation_data %>% filter(nflId == edgeSetterId_atMaxChange) %>% filter(frameId <= 3), aes(x = x, y = y),
+    color = "darkblue",
+    show.legend = FALSE,
+    size = 4
+  ) +
+  scale_color_manual(values = c("deepskyblue", "brown4", "firebrick2"))
+
+# Create the animation
+anim <- p +
+  transition_time(frameId)
+
+# Render the animation
+animate(anim, fps = fps, start_pause = 10)
+```
 
