@@ -47,7 +47,7 @@ To run: Change file path on line below. Run everything before last code
 chunk then run last code chunk to save to your data directory.
 
 ```{r}
-tracking_file <- "data/tracking_week_1.csv"
+tracking_file <- "data/tracking_week_2.csv"
 ```
 
 # Initial data cleaning pass
@@ -564,11 +564,18 @@ SameDirection_TrackData <- merge(SameDirection_TrackData, splitGap, by = "gamePl
 ```{r}
 # Just the first of tackle, first_contact, touchdown, out of bounds or gap intersection that occurs
 triangle_end_point <- SameDirection_TrackData %>%
-  filter(nflId == ballCarrierId) %>%
+  mutate(
+    ol_x = ifelse(position %in% c("T", "G", "C"), x, NA),
+    bc_x = ifelse(ballCarrierId == nflId, x, NA)
+  ) %>%
   group_by(gamePlayId) %>%
   filter(event %in% c("tackle", "first_contact", "touchdown", "out_of_bounds") |
-    frameId == frameId_intersect) %>%
+    frameId == frameId_intersect |
+      # bc_x is greater than all ol_x
+      (bc_x > max(ol_x, na.rm = TRUE) 
+      )) %>%
   filter(frameId == min(frameId)) %>%
+  filter(nflId == ballCarrierId) %>%
   reframe(
     end_x = x,
     end_y = y,
@@ -744,7 +751,7 @@ SameDirection_TrackData <- merge(SameDirection_TrackData, full_angle %>% select(
 ```{r}
 # Save dataframe as CSV
 write.csv(SameDirection_TrackData, 
-          file = "data/wk1_processed_data.csv", row.names = FALSE)
+          file = "data/wk2_processed_data.csv", row.names = FALSE)
 ```
 
 Save compiled data frame with a few filtering steps because of space issues.
