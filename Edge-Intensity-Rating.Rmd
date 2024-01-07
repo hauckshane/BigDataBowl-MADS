@@ -79,9 +79,11 @@ edgedefenders <- all_data %>%
   mutate(distance_from_ballCarrier = sqrt((x - ballCarrier_x)^2 + (y - ballCarrier_y)^2)) %>%
   # Filter players so they are on the playside edge of the ball carrier
   filter(ifelse(playSide == "left", y >= ballCarrier_y, y <= ballCarrier_y)) %>%
+  group_by(gamePlayId, frameId) %>%
   mutate(numNotDB = sum(!position %in% c("CB", "DB", "FS", "SS"))) %>%
   filter(ifelse(numNotDB > 0, !position %in% c("CB", "DB", "FS", "SS"), TRUE)) %>%  # Remove cornerbacks and safeties
   select(-numNotDB) %>%
+  ungroup() %>%
   # Filter players so they are within 5 yards of ball carrier or is closest player
   #group_by(gamePlayId, frameId) %>%
   #filter(distance_from_ballCarrier <= 5 |
@@ -180,12 +182,12 @@ EIR <- ballcarrier_edgedefenders %>%
       (distance_from_ballCarrier - min(distance_from_ballCarrier, na.rm = TRUE)) / 
       (max(distance_from_ballCarrier, na.rm = TRUE) - min(distance_from_ballCarrier, na.rm = TRUE)),
     
-    # Speed of defender
+    # Speed of ball carrier
     scale_s = 1 - 
       (ballCarrier_s - min(ballCarrier_s, na.rm = TRUE)) / 
       (max(ballCarrier_s, na.rm = TRUE) - min(ballCarrier_s, na.rm = TRUE)),
     
-    # Acceleration of defender
+    # Acceleration of ball carrier
     scale_a = 1 - 
       (ballCarrier_a - min(ballCarrier_a, na.rm = TRUE)) / 
       (max(ballCarrier_a, na.rm = TRUE) - min(ballCarrier_a, na.rm = TRUE)),
@@ -312,6 +314,34 @@ maxChangesEIR <- all_data %>%
 write.csv(maxChangesEIR, "data/BC_and_ES_information.csv")
 ```
 
+```{r}
+write.csv(all_data, "data/all_processed_data.csv")
+```
+
+
+# KEEP ALL ABOVE HERE
+# Below is EDA that can be moved to graphs
+
+```{r}
+maxChangesEIR <- read.csv("data/BC_and_ES_information.csv")
+```
+
+
+
+
+```{r}
+maxChangesEIR <- maxChangesEIR %>%
+  mutate(relative_sqrtEPA = ifelse(expectedPointsAdded < 0, -sqrt(abs(expectedPointsAdded)), sqrt(expectedPointsAdded)))
+
+mod <- lm(relative_sqrtEPA ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
+summary(mod)
+plot(mod)
+
+mod <- lm(expectedPointsAdded ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
+summary(mod)
+plot(mod)
+
+```
 
 
 # EDA
@@ -350,7 +380,7 @@ EIR_TC_plot <- maxChangesEIR %>%
 ggplot(EIR_TC_plot, aes(x = bucket_angle_min, y = 1, fill = meanEIR)) +
   geom_col(color = "lightgrey") +
   coord_polar() +
-  scale_x_continuous(limits = c(0,180)) +
+  scale_x_continuous(limits = c(0,360)) +
   scale_y_continuous(limits = c(0,1)) +
   scale_fill_gradient2(high = "darkblue", low = "firebrick4", midpoint = mean(EIR_TC_plot$meanEIR, na.rm = TRUE)) +
   labs(title = "Edge Intensity Rating by Greatest Total Change of Direction", 
@@ -379,7 +409,7 @@ EIR_RTC_plot <- maxChangesEIR %>%
 ggplot(EIR_RTC_plot, aes(x = bucket_angle_min, y = 1, fill = meanEIR)) +
   geom_col() +
   coord_polar(start = 66) +
-  scale_x_continuous(limits = c(-90,90)) +
+  scale_x_continuous(limits = c(-180,180)) +
   scale_y_continuous(limits = c(0,1)) +
   scale_fill_gradient2(high = "darkblue", low = "firebrick4", midpoint = mean(EIR_RTC_plot$meanEIR, na.rm = TRUE)) +
   labs(title = "Edge Intensity Rating by Greatest Relative Total Change", 
@@ -398,16 +428,22 @@ ggplot(EIR_RTC_plot, aes(x = bucket_angle_min, y = 1, fill = meanEIR)) +
 
 
 ```{r}
-maxChangesEIR %>%
-  select(frames_from_start_atMaxChange, expectedPointsAdded) %>%
-  mutate(bucket = cut(frames_from_start_atMaxChange, breaks = seq(min(frames_from_start_atMaxChange), max(frames_from_start_atMaxChange), 3))) %>%
-  group_by(bucket) %>%
-  summarise(n = n(),
-            meanEPA = mean(expectedPointsAdded, na.rm = TRUE)
-         ) %>%
-  ggplot(aes(x = as.factor(frames_from_start_atMaxChange), y = n, fill = meanEPA)) +
-  geom_col()
+maxChangesEIR %>% 
+  ggplot(aes(x = frames_from_start_atMaxChange, y = expectedPointsAdded)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth() +
+  labs(
+    title = "Edge Intensity Rating vs. Expected Points Added",
+    y = "Expected Points Added",
+    x = "Edge Intensity Rating"
+  )
+```
+
+```{r}
   
 ```
+
+
+
 
 
