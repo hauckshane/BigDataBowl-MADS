@@ -123,17 +123,17 @@ ggplot(plotdf, aes(x = bucket_angle_min, y = 1, fill = meanEPA)) +
   scale_x_continuous(limits = c(0,360)) +
   scale_y_continuous(limits = c(0,1)) +
   scale_fill_gradient2(low = "darkcyan", high = "firebrick4", midpoint = mean(plotdf$meanEPA, na.rm = TRUE)) +
-  labs(title = "Expected Points Added by Greatest Total Change of Direction", 
-       subtitle = "For frames where the ball carrier had the highest change in total direction", 
-       x = "Total Change", y = "", fill = "EPA") +
-  theme_minimal() +
+  labs(title = "Ball Carrier's Greatest Total Change of Direction's Effect On EPA",
+       subtitle = "As the ball carrier makes more significant maximal changes in direction, the mean EPA for the offense tends to decrease.", 
+       x = "Ball Carrier Total Change of Direction", y = "", fill = "Expected Points Added") +
+  #theme_minimal() +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.text.x = element_text(size = 12),
-        axis.title.x = element_text(size = 14),
-        plot.title = element_text(size = 16),
-        plot.subtitle = element_text(size = 12),
-        legend.key.size = unit(1, "cm"))
+        axis.title.x = element_text(size = 24),
+        plot.title = element_text(size = 28),
+        plot.subtitle = element_text(size = 14),
+        legend.key.size = unit(2, "cm"))
 ```
 
 
@@ -162,19 +162,20 @@ ggplot(plotdf, aes(x = bucket_angle_mean, y = 1)) +
   coord_polar(start = 66) +
   scale_x_continuous(limits = c(-180,180)) +
   scale_y_continuous(limits = c(0,1)) +
-  labs(title = "EPA by Relative Total Change", 
-       x = "Relative Total Change", y = " ", 
-       subtitle = "Relative Change < 0 = Cutbacks | Relative Change > 0 = Bounces",
-       fill = "EPA")  +
+  labs(title = "Ball Carrier's Greatest Relative Total Change of Direction's \nEffect On EPA", 
+       subtitle = "Edges that force the ball carrier to make a more drastic cutback or bounce have a negative effect on EPA for the offense.",
+       x = "Ball Carrier Relative Total Change of Direction", y = " ", 
+       caption = "Relative Change < 0 = Cutbacks | Relative Change = 0 = Dive | Relative Change > 0 = Bounces",
+       fill = "Expected Points Added")  +
   scale_fill_gradient2(low = "darkcyan", high = "firebrick4", midpoint = mean(plotdf$meanEPA, na.rm = TRUE)) +
-  theme_minimal() +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.text.x = element_text(size = 12),
-        axis.title.x = element_text(size = 14),
-        plot.title = element_text(size = 16),
-        plot.subtitle = element_text(size = 12),
-        legend.key.size = unit(1, "cm")) 
+        axis.title.x = element_text(size = 24),
+        plot.title = element_text(size = 28),
+        plot.subtitle = element_text(size = 14),
+        plot.caption = element_text(size = 12),
+        legend.key.size = unit(2, "cm"))
 
 ```
 
@@ -236,17 +237,17 @@ ggplot(EIR_TC_plot, aes(x = bucket_angle_min, y = 1, fill = meanEIR)) +
   scale_y_continuous(limits = c(0,1)) +
   scale_fill_gradient2(low = "midnightblue", high = "sienna2", midpoint = mean(EIR_TC_plot$meanEIR, na.rm = TRUE)) +
   labs(title = "Edge Intensity Rating by Greatest Total Change of Direction", 
-       subtitle = "For frames where the ball carrier had the highest change in total direction", 
-       x = "Total Change", y = "", 
-       fill = "EIR") +
-  theme_minimal() +
+       subtitle = "Higher EIRs are associated with greater total change of ball carrier direction.", 
+       x = "Ball Carrier Total Change of Direction", y = "", 
+       fill = "Edge Intensity Rating") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.text.x = element_text(size = 12),
-        axis.title.x = element_text(size = 14),
-        plot.title = element_text(size = 16),
-        plot.subtitle = element_text(size = 12),
-        legend.key.size = unit(1, "cm"))
+        axis.title.x = element_text(size = 24),
+        plot.title = element_text(size = 28),
+        plot.subtitle = element_text(size = 14),
+        plot.caption = element_text(size = 12),
+        legend.key.size = unit(2, "cm"))
 ```
 
 # EIR impact on relative change of direction
@@ -330,26 +331,27 @@ quickest_set_plot <- maxChangesEIR %>%
   
 p1 <- ggplot(quickest_set_plot, aes(x = bucket_angle_min, y = 1, fill = expected_EIR)) +
   geom_col(color = "black", size = .05) +
-  coord_polar(start = 66) +
-  scale_x_continuous(limits = c(-180,180)) +
+  coord_polar() +
+  scale_x_continuous(limits = c(0,360)) +
   scale_y_continuous(limits = c(0,1)) +
   scale_fill_gradient2(high = "sienna2", low = "midnightblue", midpoint = mean(maxChangesEIR$max_EIR_atMaxChange, na.rm = TRUE)) +
-  labs(title = "EIR's effect on Greatest Total Change of Direction Over Time", 
-       x = "Relative Total Change", y = "", 
-       fill = "Expected EIR") +
-  theme_minimal() +
+  labs(title = "EIR for Total Change of Direction Seconds After Handoff",
+       subtitle  = "The longer it takes for the defense to establish the edge, \nweaker EIRs lead to an increase in direct running maneuvers.", 
+       x = "Ball Carrier Total Change of Direction", y = "", 
+       fill = "Edge Intensity Rating") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.text.x = element_text(size = 12),
         axis.title.x = element_text(size = 14),
-        plot.title = element_text(size = 16),
-        plot.subtitle = element_text(size = 12),
-        legend.key.size = unit(1, "cm")) +
+        plot.title = element_text(size = 18),
+        plot.subtitle = element_text(size = 14),
+        plot.caption = element_text(size = 12),
+        legend.key.size = unit(2, "cm"))+
   transition_states(seconds_from_start_atMaxChange, transition_length = 0, state_length = 2, wrap = TRUE) +
   exit_fade() +
   ease_aes('linear') +
   # display the current frameId
-  labs(subtitle = "Seconds after handoff: {closest_state}")
+  labs(caption = "Seconds after handoff: {closest_state}")
 animate(p1, start_pause = 10, end_pause = 10, fps = 10)
 ```
 
