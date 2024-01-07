@@ -182,7 +182,8 @@ defense_playside_plot <- function(plot_df) {
 ## EIR left table
 eir_table_left <- function(plot_df) {
   plot_df <- plot_df %>%
-    filter(Playside == "left")
+    filter(Playside == "left") %>%
+    filter('Num. Plays for Player' >= 5)
   
   plot_df <- plot_df[order(-plot_df$prop), ]
   
@@ -211,7 +212,8 @@ eir_table_left <- function(plot_df) {
 ## EIR right table
 eir_table_right <- function(plot_df) {
   plot_df <- plot_df %>%
-    filter(Playside == "right")
+    filter(Playside == "right") %>%
+    filter('Num. Plays for Player' >= 5)
   
   plot_df <- plot_df[order(-plot_df$prop), ]
   
