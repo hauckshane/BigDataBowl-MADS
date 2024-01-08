@@ -1,8 +1,10 @@
 # BigDataBowl-MADS
 
 Repo for code and figures used in 2024 NFL Big Data Bowl submission: No Edge No Chance.
+
 Original data and competition information: https://www.kaggle.com/competitions/nfl-big-data-bowl-2024/overview
-Link to No Edge No Change submission: 
+
+Link to No Edge No Chance submission: 
 
 ## Files
 
