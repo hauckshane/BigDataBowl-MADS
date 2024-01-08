@@ -65,6 +65,11 @@ Save df as eir_epa.csv
 write.csv(eir_df, "edge-setting-epa/eir_epa.csv")
 ```
 
+Checking EIR values:
+```{r}
+hist(eir_df$meanEIR)
+```
+
 
 # Making tables for the Shiny app Offense view
 
