@@ -1,0 +1,68 @@
+---
+title: "Edge Intensity Rating"
+author: "Shane Hauck, Marion Haney, Devin Basley, Vinay Maruri"
+date: "2024-1-8"
+output: html_document
+---
+
+File for investigating linear and statistical relationships between EIR and EPA of plays.
+
+Load in packages.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+theme_set(theme_bw())
+```
+
+
+Load data.
+```{r}
+maxChangesEIR <- read.csv("data/BC_and_ES_information.csv")
+```
+
+
+# Check a few models
+```{r}
+maxChangesEIR <- maxChangesEIR %>%
+  mutate(relative_sqrtEPA = ifelse(expectedPointsAdded < 0, -sqrt(abs(expectedPointsAdded)), sqrt(expectedPointsAdded)))
+
+mod1 <- lm(relative_sqrtEPA ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
+summary(mod1)
+plot(mod1)
+
+mod2 <- lm(expectedPointsAdded ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
+summary(mod2)
+plot(mod2)
+
+```
+
+
+```{r}
+car::vif(mod2)
+```
+
+
+```{r}
+mod3 <- lm(log(expectedPointsAdded) ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
+summary(mod3)
+plot(mod3)
+```
+
+
+```{r}
+maxChangesEIR <- maxChangesEIR %>%
+  mutate(squareEPA = expectedPointsAdded^2)
+mod4 <- lm(squareEPA ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
+summary(mod4)
+plot(mod4)
+```
+
+
+```{r}
+maxChangesEIR <- maxChangesEIR %>%
+  mutate(reciprocalEPA = 1/expectedPointsAdded)
+mod5 <- lm(reciprocalEPA ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
+summary(mod5)
+plot(mod5)
+```
+
