@@ -15,8 +15,15 @@ theme_set(theme_bw())
 
 ```{r}
 #read in data
-all_data <- read_csv("data/all_processed_data.csv")
+#all_data <- read_csv("data/all_processed_data.csv")
 ```
+
+```{r}
+file_pattern <- "^wk[123456789]_processed_data\\.csv$"
+files <- list.files(path = "data", pattern = file_pattern, full.names = TRUE)
+all_data <- map_df(files, read.csv)
+```
+
 
 
 
@@ -112,6 +119,7 @@ all_data <- full_join(all_data, edgedefenders %>% select(-c(x,y,s,a, playSide)),
 ballcarrier_edgedefenders <- all_data %>%
   select(ballCarrierId, colnames(ballcarrier), colnames(edgedefenders),
          total_change, start_frameId, end_frameId, frameId_at_max_change) %>%
+  mutate(frames_from_start = frameId - start_frameId) %>% 
   filter(frameId >= start_frameId & frameId <= frameId_at_max_change + 1) %>%
   select(-start_frameId, -end_frameId, -frameId_at_max_change) %>%
   mutate(
@@ -158,7 +166,7 @@ ballcarrier_edgedefenders <- all_data %>%
 
   ) %>%
   select(
-    gamePlayId, frameId, ballCarrierId, nflId,
+    gamePlayId, frameId, ballCarrierId, nflId, frames_from_start,
     # defender stats
     distance_from_ballCarrier, relative_o_to_ballCarrier,
     angle_toIdealPath, edgeDef_speed_towards_ballCarrier, edgeDef_acceleration_towards_ballCarrier,
@@ -191,6 +199,11 @@ EIR <- ballcarrier_edgedefenders %>%
     scale_a = 1 - 
       (ballCarrier_a - min(ballCarrier_a, na.rm = TRUE)) / 
       (max(ballCarrier_a, na.rm = TRUE) - min(ballCarrier_a, na.rm = TRUE)),
+    
+    # Time from handoff until edge is set
+    scale_time = 1 - 
+      (frames_from_start - min(frames_from_start, na.rm = TRUE)) / 
+      (max(frames_from_start, na.rm = TRUE) - min(frames_from_start, na.rm = TRUE)),
 
     # Scaling variables where higher is better
     
