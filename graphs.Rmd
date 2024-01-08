@@ -573,13 +573,6 @@ eir_df_left %>%
   fmt_number(
     columns = c("Avg EPA"), 
     decimals = 2
-  ) %>%
-  data_color(
-    columns = c("Avg EPA"),
-    fn = scales::col_numeric(
-      palette = c("darkblue", "lightblue"),
-      domain = NULL
-    )
   ) %>% 
   tab_header(
     title = "Top 10 Left Edge Setters"
@@ -611,13 +604,6 @@ eir_df_right %>%
   fmt_number(
     columns = c("Avg EPA"), 
     decimals = 2
-  ) %>%
-  data_color(
-    columns = c("Avg EPA"),
-    fn = scales::col_numeric(
-      palette = c("darkblue", "lightblue"),
-      domain = NULL
-    )
   ) %>% 
   tab_header(
     title = "Top 10 Right Edge Setters"
