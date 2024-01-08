@@ -4,7 +4,7 @@ Repo for code and figures used in 2024 NFL Big Data Bowl submission: No Edge No 
 
 Original data and competition information: https://www.kaggle.com/competitions/nfl-big-data-bowl-2024/overview
 
-Link to No Edge No Chance submission: 
+Link to No Edge No Chance submission: https://www.kaggle.com/code/devinbasley26/no-edge-no-chance
 
 ## Files
 
