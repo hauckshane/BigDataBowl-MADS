@@ -5,8 +5,9 @@ date: "2024-1-02"
 output: html_document
 ---
 
-Combination of EDA2.Rmd and triangles.Rmd
-Run to get triangle/angle of change data for one week.
+Run for each week of tracking data, then run the combining code chunks at the end.
+Saves each week of tracking data as 'data/wkX_processed_data.csv'
+Must run for each week first due to R storage capacity.
 
 # Read in libraries
 
@@ -17,40 +18,17 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(progress)
 library(tidyverse)
-library(gganimate)
-theme_set(theme_bw())
-
-library(sportyR)
-field_params <- list(
-  field_apron = "springgreen3",
-  field_border = "springgreen3",
-  offensive_endzone = "springgreen3",
-  defensive_endzone = "springgreen3",
-  offensive_half = "springgreen3",
-  defensive_half = "springgreen3"
-)
-
-nfl_field <- function(xlims) {
-  geom_football(
-    league = "nfl",
-    display_range = "full",
-    x_trans = 60,
-    y_trans = 26.6667,
-    xlims = xlims,
-    color_updates = field_params
-  )
-}
 ```
 
 
 To run: Change file path on line below. Run everything before last code 
-chunk then run last code chunk to save to your data directory.
+chunk then run last code chunk to save combined data to your data directory.
 
 ```{r}
-tracking_file <- "data/tracking_week_2.csv"
+tracking_file <- "data/tracking_week_1.csv"
 ```
 
-# Initial data cleaning pass
+# Initial data cleaning pass: Filtering for Zone Run Plays inside the tackle box
 
 ```{r}
 players <- read_csv("data/players.csv")
@@ -388,12 +366,7 @@ identify each unique play.
 SameDirection_TrackData$gamePlayId <- paste(SameDirection_TrackData$gameId, SameDirection_TrackData$playId)
 ```
 
-# FINDING POINTS OF THE TRIANGLE
-
-We want to identify 3 points of the triangle which represents the ballCarrier's
-path.
-
-Save these coordinates in the data. Then, we can calculate the angle of change.
+# Finding Total Directional Change and Relative Directional Change
 
 ## Start
 (X,Y) of ballCarrier when event == “handoff”
@@ -416,15 +389,6 @@ SameDirection_TrackData <- merge(SameDirection_TrackData, start, by = "gamePlayI
 ```
 
 ## End
-If: event includes “tackle”, (X,Y) of ballCarrier when event == “tackle”
-Else: location where ballCarrier breaks gap point
-Shane’s soccer code: checks every player pairing and sees if ballCarrier line 
-crosses in-between lines
-
-Do when the player breaks gap point first, because they could be tackled 
-after that. Then, if end_x and end_y are NA for that play, check those plays 
-for the tackle events.
-
 end_x, end_y, end_frameId
 
 
@@ -592,15 +556,8 @@ SameDirection_TrackData <- merge(SameDirection_TrackData, triangle_end_point, by
 
 
 
-# Find angle of change
-The angle we want is the inside angle.
-If we have vertices F, S, and E (change frame, start, end) we want angle F, 
-which is made from line segments EF and FS.
-
-1. angle FSE = arctan((end_y - changeFrame_y)/ (end_x - changeFrame_y))
-2. angle F = 180 - angle FSE
-
-Radians to degree conversion: degree = radians * (180/pi)
+# Find angle of locational change
+The angle we want is the inside angle at the point of locational change.
 
 ```{r}
 # Function to calculate the angle of change, angle F
@@ -645,7 +602,7 @@ smallest_angle_diff <- function(angle1, angle2) {
 ```
 
 
-# Finding the greatest change in direction
+# Finding the greatest directional change for the play
 
 ```{r}
 angls <- SameDirection_TrackData %>%
@@ -728,7 +685,7 @@ SameDirection_TrackData <- full_join(SameDirection_TrackData, max_angle_change, 
 
 
 
-# Where the greatest change in direction occurs calculate that angle with the end point
+# Where the greatest directional change occurs calculate that angle with the end point
 
 ```{r}
 full_angle <- SameDirection_TrackData %>%
@@ -744,9 +701,7 @@ SameDirection_TrackData <- merge(SameDirection_TrackData, full_angle %>% select(
 ```
 
 
-##### Stopped moving from triangles here
-
-# Save resulting data as processed_data.csv
+# Save resulting data as all_processed_data.csv and filtered_processed_data.csv
 
 ```{r}
 # Save dataframe as CSV
