@@ -240,7 +240,10 @@ EIR <- ballcarrier_edgedefenders %>%
     edge_intensity_rating = rowMeans(select(., starts_with("scale_")), na.rm = TRUE),
     # Normalize EIR to a scale of 0 to 100
     edge_intensity_rating = ((edge_intensity_rating - min(edge_intensity_rating, na.rm = TRUE)) / 
-      (max(edge_intensity_rating, na.rm = TRUE) - min(edge_intensity_rating, na.rm = TRUE))) * 100
+      (max(edge_intensity_rating, na.rm = TRUE) - min(edge_intensity_rating, na.rm = TRUE))) * 100,
+    
+    # Calculate edge intensity rating without considering time
+    edge_intensity_rating_no_time = rowMeans(select(., starts_with("scale_") & !ends_with("_time")), na.rm = TRUE)
   ) 
 
 all_data <- full_join(all_data, EIR, by = c("gamePlayId", "frameId", "nflId"))
@@ -321,7 +324,7 @@ maxChangesEIR <- all_data %>%
   filter(frameId == frameId_at_max_change) %>%
   distinct(gamePlayId, playSide, possessionTeam, ballCarrierId, defensiveTeam, edgeSetterId_atMaxChange, 
            frames_from_start_atMaxChange, total_change_at_max_change, relative_total_change,
-           max_EIR_atMaxChange, expectedPointsAdded)
+           max_EIR_atMaxChange, expectedPointsAdded, edge_intensity_rating_no_time)
 ``` 
 
 ```{r}
