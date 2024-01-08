@@ -17,7 +17,7 @@ Reads in all_processed_data.csv and uses data to create Edge Intensity Rating (E
 ### graphs.Rmd
 Makes static visualizations and animations for displaying total directional change, relative directional change, EIR, and their relationships with EPA.
 
-### EIR-EPA-model.Rmd
+### Model.Rmd
 Investigates and confirms relationships between EIR and EPA. Uses a linear model and regression analysis.
 
 ## Folders
