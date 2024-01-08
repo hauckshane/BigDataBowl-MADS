@@ -26,7 +26,7 @@ field_params <- list(
 nfl_field <- function(xlims) {
   geom_football(
     league = "nfl",
-    display_range = "full",
+    display_range = "in_bounds_only",
     x_trans = 60,
     y_trans = 26.6667,
     xlims = xlims,
@@ -439,3 +439,105 @@ anim <- p +
 animate(anim, fps = fps, start_pause = 10)
 ```
 
+
+# Animation for EIR
+
+```{r}
+nfl_field <- function(xlims) {
+  geom_football(
+    league = "nfl",
+    display_range = "in_bounds_only",
+    x_trans = 60,
+    y_trans = 26.6667,
+    xlims = xlims,
+    color_updates = field_params
+  )
+}
+
+animation_data2 <- combined_data %>% 
+  mutate(normalize_total_change = (total_change - min(total_change, na.rm = TRUE)) / 
+           (max(total_change, na.rm = TRUE) - min(total_change, na.rm = TRUE))) %>%
+  
+  mutate(normalize_EIR = (edge_intensity_rating_no_time - min(edge_intensity_rating_no_time, na.rm = TRUE)) / 
+           (max(edge_intensity_rating_no_time, na.rm = TRUE) - min(edge_intensity_rating_no_time, na.rm = TRUE))) %>%
+  filter(gamePlayId == "2022091500 1983")
+edge_players <- animation_data2 %>% filter(!is.na(edge_intensity_rating)) %>% group_by(frameId) %>%
+               filter(edge_intensity_rating == max(edge_intensity_rating, na.rm = T))
+p2 <- nfl_field(c(60, 100)) +
+  geom_point(
+    data = animation_data2, aes(x = x, y = y, color = club),
+    show.legend = FALSE,
+    size = 2
+  ) +
+  geom_point(
+    data = animation_data2 %>% filter(nflId == ballCarrierId), aes(x = x, y = y),
+    color = "brown4",
+    show.legend = FALSE,
+    size = 2
+  ) +
+  geom_hline(data = edge_players, 
+             aes(yintercept = y), color = "darkblue") +
+  geom_point(data = edge_players, 
+             aes(x = x, y = y), color = "darkblue", 
+             size = 2 + (edge_players$edge_intensity_rating / 100)*2.5) +
+  transition_time(frameId) +
+  scale_color_manual(values = c("brown4", "deepskyblue", "firebrick2")) 
+
+animating_graphs <- animation_data2 %>% group_by(frameId)  %>%
+  distinct(frameId, edge_intensity_rating_no_time, normalize_total_change) 
+  
+
+p3 <- ggplot(animating_graphs, aes(x = frameId - first(animation_data2$start_frameId))) +
+  geom_line(aes(y = normalize_total_change, color = "Ball Carrier\nDirection Change"), linewidth = 2) +
+  geom_line(data = animating_graphs %>% group_by(frameId) %>%
+              filter(edge_intensity_rating_no_time == max(edge_intensity_rating_no_time, na.rm = TRUE)),
+            aes(y = edge_intensity_rating_no_time, color = "Edge Intensity\nRating"), linewidth = 2) +
+  transition_reveal(frameId) +
+  geom_vline(xintercept = animation_data2$frameId_at_max_change - first(animation_data2$start_frameId) - 1, color = "black", linetype = "dashed") +
+  geom_vline(xintercept = animation_data2$frameId_at_max_change - first(animation_data2$start_frameId), color = "black", linetype = "dashed") +
+  scale_x_continuous(breaks = seq(first(animation_data2$start_frameId)+1 - first(animation_data2$start_frameId),
+                                  first(animation_data2$frameId_at_max_change) - first(animation_data2$start_frameId), 
+                                  1), 
+                     limits = c(first(animation_data2$start_frameId)+1 - first(animation_data2$start_frameId),
+                                first(animation_data2$frameId_at_max_change) - first(animation_data2$start_frameId))) +
+  scale_color_manual(values = c("Edge Intensity\nRating" = "purple", "Ball Carrier\nDirection Change" = "grey30"),
+                     breaks = c("Edge Intensity\nRating", "Ball Carrier\nDirection Change")) +
+  scale_y_continuous(limits = c(0,.75)) +
+  labs(title = "As Edge Intensity Rating Increases, Ball Carrier Total \nChange in Direction Increases",
+       subtitle = "*With time not factored into EIR.",
+       x = "Miliseconds After Handoff", y = "Normalized Value", color = "Legend:") +
+  # Remove grid lines
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank()
+  ) +
+  theme(
+        axis.text.x = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        plot.title = element_text(size = 18),
+        plot.subtitle = element_text(size = 14),
+        plot.caption = element_text(size = 12),
+        legend.key.size = unit(1, "cm"),
+        legend.text = element_text(size = 12))
+
+library(magick)
+field_g <- animate(p2, fps =10, width = 600, height = 290)
+image_write(field_g, "field.gif")
+field_gif <- image_read("field.gif")
+cropped_image <- image_crop(field_gif, "420x290+100+0")
+rotated_image <- image_rotate(cropped_image, -90)
+rotated_image <- image_crop(rotated_image, "600x290+0+100")
+image_write(rotated_image, "field.gif")
+field_gif <- image_read("field.gif")
+graph_g <- animate(p3, fps = 10, width = 450, height = 280)
+image_write(graph_g, "graph.gif")
+graph_gif <- image_read("graph.gif")
+
+comb_gif <- image_append(c(field_gif[1], graph_gif[1]), stack = FALSE)
+for(i in 2:100){
+  combined <- image_append(c(field_gif[i], graph_gif[i]), stack = FALSE)
+  comb_gif <- c(comb_gif, combined)
+}
+comb_gif
+```
