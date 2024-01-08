@@ -121,6 +121,7 @@ ballcarrier_edgedefenders <- all_data %>%
          total_change, start_frameId, end_frameId, frameId_at_max_change) %>%
   mutate(frames_from_start = frameId - start_frameId) %>% 
   filter(frameId >= start_frameId & frameId <= frameId_at_max_change + 1) %>%
+  filter(frames_from_start <= 30) %>%
   select(-start_frameId, -end_frameId, -frameId_at_max_change) %>%
   mutate(
     # Calculate edge defender's angle relative to ball carrier's ideal path
@@ -273,6 +274,7 @@ all_data <- all_data %>%
     edgeSetterId_atMaxChange = edgeSetterId_atFrame[which.max(total_change)],
     frames_from_start_atMaxChange = frames_from_start[which.max(total_change)]
   ) %>%
+  filter(frames_from_start <= 30) %>%
   ungroup() 
 
 missing_EIR <- all_data %>% 
@@ -321,6 +323,12 @@ maxChangesEIR <- all_data %>%
            frames_from_start_atMaxChange, total_change_at_max_change, relative_total_change,
            max_EIR_atMaxChange, expectedPointsAdded)
 ``` 
+
+```{r}
+ggplot(maxChangesEIR, aes(x = max_EIR_atMaxChange)) +
+  geom_histogram(bins = 10) 
+```
+
 
 
 ```{r}
