@@ -90,7 +90,7 @@ eir_df$meanTime <- round(eir_df$meanTime, 2)
 ```{r}
 eir_df_left <- eir_df %>%
     filter(playSide == "left") %>%
-    filter(n_player_plays  >= 5)
+    filter(n_player_plays  >= 10)
   
 eir_df_left <- eir_df_left[order(-eir_df_left$meanEIR), ]
 
@@ -128,7 +128,7 @@ eir_df_left %>%
 ```{r}
 eir_df_right <- eir_df %>%
     filter(playSide == "right") %>%
-    filter(n_player_plays  >= 5)
+    filter(n_player_plays  >= 10)
   
 eir_df_right <- eir_df_right[order(-eir_df_right$meanEIR), ]
 
