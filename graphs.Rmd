@@ -493,7 +493,7 @@ p3 <- ggplot(animating_graphs, aes(x = frameId - first(animation_data2$start_fra
   scale_color_manual(values = c("Edge Intensity\nRating" = "purple", "Ball Carrier\nDirection Change" = "grey30"),
                      breaks = c("Edge Intensity\nRating", "Ball Carrier\nDirection Change")) +
   scale_y_continuous(limits = c(0,.75)) +
-  labs(title = "As Edge Intensity Rating Increases, Ball Carrier Total \nChange in Direction Increases",
+  labs(title = "As Edge Intensity Rating Increases, Ball Carrier\nTotal Change in Direction Increases",
        subtitle = "*With time not factored into EIR.",
        x = "Miliseconds After Handoff", y = "Normalized Value", color = "Legend:") +
   # Remove grid lines
