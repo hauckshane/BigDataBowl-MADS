@@ -5,7 +5,9 @@ date: "2024-1-5"
 output: html_document
 ---
 
+File for creating BC_and_ES_info.csv and calculating Edge Intensity Rating of inside zone run plays.
 
+Load packages.
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
@@ -13,22 +15,14 @@ library(gganimate)
 theme_set(theme_bw())
 ```
 
+Read in processed data.
 ```{r}
-#read in data
-#all_data <- read_csv("data/all_processed_data.csv")
-```
-
-```{r}
-file_pattern <- "^wk[123456789]_processed_data\\.csv$"
-files <- list.files(path = "data", pattern = file_pattern, full.names = TRUE)
-all_data <- map_df(files, read.csv)
+# Read in data
+all_data <- read_csv("data/all_processed_data.csv")
 ```
 
 
-
-
-# Filter out penaltys
-
+# Filter out penalties
 ```{r}
 # Remove plays where playDescription includes "PENALTY"
 all_data <- all_data %>% filter(!grepl("PENALTY", playDescription))
@@ -36,14 +30,17 @@ all_data <- all_data %>% filter(!grepl("PENALTY", playDescription))
 
 
 # Filter out unusually big changes in direction
+Using EDA, we found the majority of our data lies within this range.
 ```{r}
 all_data <- all_data %>% filter(total_change_at_max_change < 30)
 ```
+
 
 # Filter out unusual EPA
 ```{r}
 all_data <- all_data %>% filter(abs(expectedPointsAdded) <= 6) %>% filter(!is.na(expectedPointsAdded))
 ```
+
 
 # Get information about the ball carrier during time of interest
 ```{r}
@@ -65,6 +62,7 @@ ballcarrier <- all_data %>%
 
 all_data <- full_join(all_data, ballcarrier, by = c("gamePlayId", "frameId"))
 ```
+
 
 # Get information about players being considered as edge defenders
 ```{r}
@@ -113,8 +111,8 @@ edgedefenders <- all_data %>%
 all_data <- full_join(all_data, edgedefenders %>% select(-c(x,y,s,a, playSide)), by = c("gamePlayId", "frameId", "nflId"))
 ```
 
-# Information about ball carriers and edge defenders
 
+# Information about ball carriers and edge defenders
 ```{r}
 ballcarrier_edgedefenders <- all_data %>%
   select(ballCarrierId, colnames(ballcarrier), colnames(edgedefenders),
@@ -177,8 +175,8 @@ ballcarrier_edgedefenders <- all_data %>%
   na.omit()
 ```
 
-# Create Edge Intensity Rating
 
+# Create Edge Intensity Rating
 ```{r}
 EIR <- ballcarrier_edgedefenders %>%
   mutate(
@@ -251,7 +249,6 @@ all_data <- full_join(all_data, EIR, by = c("gamePlayId", "frameId", "nflId"))
 
 
 # Create variable for highest EIR at each frame
-
 ```{r}
 all_data <- all_data %>%
   group_by(gamePlayId, frameId) %>%
@@ -267,8 +264,8 @@ all_data <- all_data %>%
   ungroup() 
 ```
 
-# Create varibles for EIR at max total change of direction
 
+# Create varibles for EIR at max total change of direction
 ```{r}
 all_data <- all_data %>%
   group_by(gamePlayId) %>%
@@ -319,6 +316,7 @@ all_data <- left_join(all_data, missing_EIR, by = c("gamePlayId")) %>%
 
 ```
 
+
 ```{r}
 maxChangesEIR <- all_data %>% 
   filter(frameId == frameId_at_max_change) %>%
@@ -327,71 +325,16 @@ maxChangesEIR <- all_data %>%
            max_EIR_atMaxChange, expectedPointsAdded, edge_intensity_rating_no_time)
 ``` 
 
+
+Check distribution of maxChangesEIR.
 ```{r}
 ggplot(maxChangesEIR, aes(x = max_EIR_atMaxChange)) +
   geom_histogram(bins = 10) 
 ```
 
 
-
+# Save the resulting data
 ```{r}
 write.csv(maxChangesEIR, "data/BC_and_ES_information.csv")
-```
-
-```{r}
-write.csv(all_data, "data/all_processed_data.csv")
-```
-
-
-# KEEP ALL ABOVE HERE
-# Below is EDA that can be moved to graphs
-
-```{r}
-maxChangesEIR <- read.csv("data/BC_and_ES_information.csv")
-```
-
-
-
-
-```{r}
-maxChangesEIR <- maxChangesEIR %>%
-  mutate(relative_sqrtEPA = ifelse(expectedPointsAdded < 0, -sqrt(abs(expectedPointsAdded)), sqrt(expectedPointsAdded)))
-
-mod1 <- lm(relative_sqrtEPA ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
-summary(mod1)
-plot(mod1)
-
-mod2 <- lm(expectedPointsAdded ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
-summary(mod2)
-plot(mod2)
-
-```
-
-
-
-```{r}
-car::vif(mod2)
-```
-
-
-```{r}
-mod3 <- lm(log(expectedPointsAdded) ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
-summary(mod3)
-plot(mod3)
-```
-
-```{r}
-maxChangesEIR <- maxChangesEIR %>%
-  mutate(squareEPA = expectedPointsAdded^2)
-mod4 <- lm(squareEPA ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
-summary(mod4)
-plot(mod4)
-```
-```{r}
-maxChangesEIR <- maxChangesEIR %>%
-  mutate(reciprocalEPA = 1/expectedPointsAdded)
-mod5 <- lm(reciprocalEPA ~ max_EIR_atMaxChange + frames_from_start_atMaxChange, data = maxChangesEIR)
-summary(mod5)
-plot(mod5)
 ```
 
