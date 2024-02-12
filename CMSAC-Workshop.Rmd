@@ -1,0 +1,530 @@
+---
+title: "CMSAC Workshop"
+author: "Marion Haney"
+date: "2023-11-10"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(ggplot2)
+library(sportyR)
+library(gganimate)
+library(magick)
+library(ggthemes)
+library(gt)
+```
+
+
+# Load in data.
+
+Week 1 data from the 2021 NFL season.
+
+```{r}
+games <- read_csv("2023-data/games.csv")
+plays <- read_csv("2023-data/plays.csv")
+players <- read_csv("2023-data/players.csv")
+pffScoutingData <-read_csv("2023-data/pffScoutingData.csv")
+```
+
+Combine the tracking data for 2021 weeks 1-8.
+```{r}
+# path <- "2023-data/"
+# tracking <- list.files(pattern = "week", path = path) %>%
+#   map(read_csv) %>%
+#   list_rbind()
+
+week_files = c("2023-data/week1.csv", "2023-data/week2.csv", 
+               "2023-data/week3.csv", "2023-data/week4.csv",
+               "2023-data/week5.csv", "2023-data/week6.csv", 
+               "2023-data/week7.csv", "2023-data/week8.csv")
+tracking <- map(week_files, read_csv) %>% list_rbind()
+```
+
+
+
+# Standardize the data.
+
+In raw football data there are 2 play directions. We want to standardize the 
+data so they are moving left to right.
+
+```{r}
+tracking <- tracking |>
+  mutate(
+    # Make all plays go from left to right
+    x = ifelse(playDirection == "left", 120 - x, x),
+    y = ifelse(playDirection == "left", 160 / 3 - y, y),
+    # Flip player direction and orientation
+    dir = ifelse(playDirection == "left", dir + 180, dir),
+    dir = ifelse(dir > 360, dir - 360, dir),
+    o = ifelse(playDirection == "left", o + 180, o),
+    o = ifelse(o > 360, o - 360, o)
+  )
+```
+
+
+
+# Visualizing Tracking Data
+
+Pick a play to become the case study.
+
+Plot the football field.
+
+```{r}
+field_params <- list(field_apron = "springgreen3",
+                     field_border = "springgreen3",
+                     offensive_endzone = "springgreen3",
+                     defensive_endzone = "springgreen3",
+                     offensive_half = "springgreen3",
+                     defensive_half = "springgreen3")
+nfl_field <- geom_football(league = "nfl", ## this is from the sportyR package
+                           display_range = "in_bounds_only",
+                           x_trans = 60,
+                           y_trans = 26.6667,
+                           xlims = c(35, 85),
+                           color_updates = field_params)
+nfl_field
+```
+
+
+Visualizing tracking data.
+
+FRAMES ARE IN FOLDER
+```{r, message = FALSE, warning = FALSE}
+# example_play <- tracking |> 
+#   filter(gameId == 2021101709, playId == 1444) |> 
+#   mutate(pt_color = case_when(team == "DEN" ~ "navy",
+#                               team == "LV" ~ "white",
+#                               team == "football" ~ "yellow"))
+# nfl_field +
+#   geom_point(data = example_play,
+#              aes(120 - x, 160 / 3 - y),
+#              size = 3,
+#              color = example_play$pt_color) +
+#   transition_time(example_play$frameId)
+```
+
+
+# Defining a metric
+
+Performance metrics based on tracking data can be classified into two types:
+
+1. directly-derived - directly calculated from data
+
+2. model-based - estimated through statistical model
+
+
+
+### Strain rate in materials science:
+
+Ratio of stretching speed and original length. Think of a rubber band. This 
+describes deformation of a material over time.
+
+### For football pass rush:
+You need a fast velocity towards the QB and close distance to QB.
+This metric is directly derived.
+
+STRAIN: -v/d --> negative velocity divided by distance
+
+### Advantages of STRAIN: 
+
+Directly derived measures are simpler and easier to compute. 
+It is also more interpretable: "time required for a pass rusher to 
+get to the QB given the current velocity and distance to the QB". 
+It is also scalable, which means it can be applied to almost every passing 
+plays.
+This is also a continuous-time within-play metric-- meaning it can be 
+calculated during the play (instantaneously) and it can take on continuous 
+values.
+
+
+# Implementing STRAIN
+
+Filter data-- only ball snap and QB event. Find locations of passers and 
+pass rushers. Calculate velocity and distance-- to calculate STRAIN.
+
+Identify the starting and ending events, then collect the first observed start 
+and end frames for each play.
+
+```{r}
+tracking_start_end <- tracking |>
+  distinct(gameId, playId, frameId, event) |>
+  mutate(is_start = as.numeric(event %in% c("autoevent_ballsnap", "ball_snap")),
+  is_end = as.numeric(event %in% c("fumble", "handoff", "lateral", "autoevent_passforward",
+  "pass_forward", "qb_sack", "qb_strip_sack", "run"))) |>
+  group_by(gameId, playId) |>
+  mutate(any_start = any(is_start == 1), any_end = any(is_end == 1)) |>
+  filter(any_start, any_end) |>
+  summarize(start_frame = frameId[which(is_start == 1)[1]],
+  end_frame = frameId[which(is_end == 1 & frameId > start_frame)[1]]) |>
+  ungroup()
+```
+
+Join with tracking data and filter frames.
+
+```{r}
+tracking <- tracking |>
+  left_join(tracking_start_end, by = c("gameId", "playId")) |>
+  filter(!is.na(start_frame), !is.na(end_frame),
+  frameId >= start_frame, frameId <= end_frame) |>
+  mutate(frameId_corrected = frameId - start_frame) 
+```
+
+Identify players and their roles. Joined the game and play metadata.
+
+```{r}
+tracking_roles <- tracking |>
+  left_join(pffScoutingData, by = c("gameId", "playId", "nflId"))
+```
+
+Get passer location for every frame of the play.
+
+```{r}
+tracking_qb <- tracking_roles |>
+  filter(pff_role == "Pass", pff_positionLinedUp == "QB") |>
+  select(gameId, playId, frameId, x_qb = x, y_qb = y)
+```
+
+# Visualizing STRAIN
+
+
+```{r}
+tracking_pass_rush <- tracking_roles |>
+  filter(pff_role == "Pass Rush") |>
+  left_join(tracking_qb) |>
+  group_by(gameId, playId, nflId) |>
+  mutate(d_qb = sqrt((x - x_qb) ^ 2 + (y - y_qb) ^ 2),
+         v_qb = -(d_qb - lag(d_qb)) / 0.1,
+         strain = v_qb / d_qb) |>
+  ungroup()
+```
+
+
+```{r}
+example_pass_rush <- tracking_pass_rush |>
+  filter(gameId == 2021101709, playId == 1444, !is.na(strain))
+
+example_play_strain <- example_play |>
+  left_join(select(example_pass_rush, gameId:frameId, strain)) |>
+  mutate(
+  pt_color = ifelse(nflId != 47889, pt_color, "maroon"),
+  pt_color = ifelse(team != "football", pt_color, "yellow"),
+  pt_size = ifelse(is.na(strain), 3, scales::rescale(strain, to = c(3, 8), from = range(example_pass_rush$strain))),
+  pt_size = ifelse(team == "football", 2, pt_size)
+)
+```
+
+
+Example play.
+
+FRAMES ARE IN FOLDER
+```{r, message = FALSE, warning = FALSE}
+# nfl_field +
+#   geom_point(data = example_play_strain,
+#   aes(120 - x, 160 / 3 - y),
+#   size = example_play_strain$pt_size,
+#   color = example_play_strain$pt_color) +
+#   transition_time(example_play_strain$frameId)
+```
+
+
+Feature curves.
+
+```{r}
+example_pass_rush |>
+  filter(nflId == 47889) |>
+  pivot_longer(cols = c(d_qb, v_qb, strain),
+    names_to = "feature",
+    values_to = "value") |>
+  mutate(
+    feature = fct_relevel(feature, "strain", after = Inf),
+    feature = fct_recode(feature,
+    "Distance" = "d_qb",
+    "Velocity" = "v_qb",
+    "STRAIN" = "strain")) |>
+  ggplot(aes(frameId_corrected, value, color = feature)) +
+  geom_line(linewidth = 1.5) +
+  scale_color_manual(
+  values = c("blue", "orange", "maroon")) +
+  labs(x = "Number of frames since snap", 
+       y = "Feature value",
+       color = NULL)
+```
+
+
+Get an animation of both graphs: make both figures have the same duration then 
+combine them together using the magick package.
+
+
+# Metric Validation
+
+How does STRAIN differ across different positions? Different play outcomes?
+
+Which players have the best STRAIN?
+
+Is the metric stable over time?
+
+Does this metric provide new information?
+
+How does STRAIN relate to previous metrics?
+
+
+# STRAIN across different positions
+
+```{r}
+tracking_pass_rush |> 
+  left_join(players) |>
+  filter(
+    frameId_corrected <= 40,
+    officialPosition %in% c("OLB", "DE", "DT", "NT")
+  ) |> 
+  mutate(
+    officialPosition = fct_relevel(officialPosition, 
+                                   "OLB", "DE", "DT", "NT")
+  ) |>
+  group_by(frameId_corrected, officialPosition) |> 
+  summarize(avg_strain = 10 * mean(strain, na.rm = TRUE)) |> 
+  ggplot(aes(frameId_corrected, avg_strain, 
+             color = officialPosition)) +
+  geom_smooth(se = FALSE, span = 0.3, linewidth = 1) +
+  ggthemes::scale_color_colorblind() +
+  labs(x = "Number of frames since snap",
+       y = "Average STRAIN",
+       color = "Position")
+```
+
+
+# STRAIN across different play outcomes
+
+```{r}
+pff_outcomes <- pffScoutingData |> 
+  group_by(gameId, playId, nflId) |> 
+  summarize(i_hit = sum(pff_hit, na.rm = TRUE) > 0,
+            i_hurry = sum(pff_hurry, na.rm = TRUE) > 0 ,
+            i_sack = sum(pff_sack, na.rm = TRUE) > 0,
+            i_none = (i_hit + i_hurry + i_sack) == 0) |> 
+  ungroup() |> 
+  pivot_longer(i_hit:i_none,
+               names_to = "outcome",
+               names_prefix = "i_",
+               values_to = "value") |> 
+  filter(value)
+```
+
+
+```{r}
+tracking_pass_rush |> left_join(pff_outcomes) |> 
+  left_join(players) |>
+  filter(frameId_corrected <= 40,
+         officialPosition %in% c("OLB", "DE", "DT", "NT")
+  ) |> 
+  mutate(
+    officialPosition = fct_relevel(officialPosition, 
+                                   "OLB", "DE", "DT", "NT"),
+         outcome = fct_relevel(outcome, 
+                          "sack", "hit", "hurry", "none")
+  ) |>
+  group_by(frameId_corrected, outcome, officialPosition) |> 
+  summarize(avg_strain = 10 * mean(strain, na.rm = TRUE)) |> 
+  ggplot(aes(frameId_corrected, avg_strain, 
+             color = officialPosition)) +
+  geom_smooth(se = FALSE, span = 0.3, linewidth = 1) +
+  facet_wrap(~ outcome, nrow = 1) +
+  ggthemes::scale_color_colorblind() +
+  labs(x = "Number of frames since snap",
+       y = "Average STRAIN",
+       color = "Position") +
+  theme(legend.position = "bottom")
+```
+
+
+
+# Who are the best pass rushers according to STRAIN?
+
+```{r}
+pass_rushers_eval <- pffScoutingData |>
+  filter(pff_role == "Pass Rush") |>
+  group_by(nflId) |>
+  summarize(snaps = n_distinct(gameId, playId)) |>
+  filter(snaps >= 100)
+```
+
+
+```{r}
+ranking_pass_rush <- tracking_pass_rush |>
+  filter(nflId %in% pass_rushers_eval$nflId, !is.infinite(strain)) |>
+  group_by(nflId) |>
+  summarize(avg_strain = 10 * mean(strain, na.rm = TRUE),
+            snaps = n_distinct(gameId, playId),
+            team = first(team)) |>
+  left_join(players) |>
+  arrange(desc(avg_strain)) |> 
+  select(Player = displayName, Team = team, Position = officialPosition,
+         Snaps = snaps, "Average STRAIN" = avg_strain)
+```
+
+
+Top 10 edge rushers:
+
+```{r}
+ranking_pass_rush |> 
+  filter(Position %in% c("OLB", "DE")) |> 
+  slice_head(n = 10) |> 
+  gt() |> 
+  fmt_number(
+    columns = c("Average STRAIN"), 
+    decimals = 2
+  ) |>
+  data_color(
+    columns = c("Average STRAIN"),
+    fn = scales::col_numeric(
+      palette = c("lightgreen", "darkgreen"),
+      domain = NULL
+    )
+  ) |>
+  tab_header(
+    title = "Top 10 Edge Rushers", 
+    subtitle = "(Minimum 100 plays)"
+  )
+```
+
+
+Top 10 interior rushers:
+
+```{r}
+ranking_pass_rush |>
+  filter(Position %in% c("DT", "NT")) |>
+  slice_head(n = 10) |>
+  gt() |>
+  fmt_number(
+    columns = c("Average STRAIN"), 
+    decimals = 2
+  ) |>
+  data_color(
+    columns = c("Average STRAIN"),
+    fn = scales::col_numeric(
+      palette = c("lightblue", "darkblue"),
+      domain = NULL
+    )
+  ) |> 
+  tab_header(
+    title = "Top 10 Interior Rushers", 
+    subtitle = "(Minimum 100 plays)"
+  )
+```
+
+
+# STRAIN and Pressure Rate
+
+Correlate STRAIN with the pressure rate measure.
+Average STRAIN vs. pressure rate: (hurries + sacks + hits)/snaps
+
+```{r}
+pff_pressure <- pffScoutingData |>
+  group_by(nflId) |>
+  summarize(hurries = sum(pff_hurry, na.rm = TRUE),
+            sacks = sum(pff_sack, na.rm = TRUE),
+            hits = sum(pff_hit, na.rm = TRUE))
+```
+
+```{r}
+strain_pressure <- tracking_pass_rush |>
+  filter(nflId %in% pass_rushers_eval$nflId, 
+         !is.infinite(strain)) |>
+  group_by(nflId) |>
+  summarize(avg_strain = 10 * mean(strain, na.rm = TRUE),
+            snaps = n_distinct(gameId, playId)) |>
+  left_join(pff_pressure) |>
+  mutate(pressure_rate = (hurries + sacks + hits) / snaps)
+strain_pressure |> 
+  slice_head(n = 5)
+```
+
+Find the correlation between the two metrics.
+
+```{r}
+cor(strain_pressure$avg_strain, 
+    strain_pressure$pressure_rate)
+```
+
+
+Scatterplot of average STRAIN and pressure rate.
+
+```{r}
+strain_pressure |>
+  left_join(players) |>
+  mutate(
+    officialPosition = fct_relevel(officialPosition, 
+                                   "OLB", "DE", "DT", "NT")
+  ) |>
+  ggplot(aes(avg_strain, pressure_rate)) +
+  geom_point(aes(color = officialPosition), size = 2) +
+  geom_smooth(method = "lm", se = FALSE, 
+              color = "darkblue", linewidth = 1.5) +
+  ggthemes::scale_color_colorblind() +
+  labs(x = "Average STRAIN",
+       y = "Pressure rate",
+       color = "Position")
+```
+
+
+
+# How does STRAIN vary over time?
+
+Get the average STRAIN for the first 4 weeks and the last 4 weeks-- see if they 
+are correlated with each other.
+
+```{r}
+strain_weeks <- tracking_pass_rush |>
+  filter(nflId %in% pass_rushers_eval$nflId, 
+         !is.infinite(strain)) |>
+  left_join(games) |>
+  mutate(i_week = ifelse(week > 4, "last4", "first4")) |>
+  group_by(nflId, i_week) |>
+  summarize(avg_strain = 10 * mean(strain, na.rm = TRUE)) |>
+  ungroup() |>
+  pivot_wider(names_from = i_week, values_from = avg_strain)
+strain_weeks |> slice_head(n = 5)
+```
+
+
+```{r}
+cor(strain_weeks$first4, strain_weeks$last4)
+```
+
+
+Visualize average STRAIN over time.
+
+```{r}
+strain_weeks |>
+  left_join(players) |>
+  mutate(
+    officialPosition = fct_relevel(officialPosition, 
+                                   "OLB", "DE", "DT", "NT")
+  ) |>
+  ggplot(aes(first4, last4)) +
+  geom_point(aes(color = officialPosition), size = 2) +
+  geom_smooth(method = "lm", se = FALSE, 
+              color = "darkblue", linewidth = 1.5) +
+  ggthemes::scale_color_colorblind() +
+  labs(x = "Average STRAIN (first 4 weeks)",
+       y = "Average STRAIN (last 4 weeks)",
+       color = "Position")
+```
+
+
+# Is STRAIN more predictive of pressure than 'pressure' itself?
+
+Yes, based on this study's findings.
+
+
+# Multilevel Model: Specification
+
+Study resampled data using bootstrap over team drives within games. Used this 
+to model STRAIN performance of players with confidence intervals/distributions.
+
+TJ Watt is pretty good! Yay go Steelers.
+
+
+
