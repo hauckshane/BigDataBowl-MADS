@@ -23,6 +23,24 @@ field_params <- list(
   defensive_half = "lightgray"
 )
 
+field_params <- list(
+  field_apron = "#83f28f",
+  field_border = "#83f28f",
+  offensive_endzone = "#003594",
+  defensive_endzone = "#c9243f",
+  offensive_half = "#83f28f",
+  defensive_half = "#83f28f",
+  sideline = "black",
+  goalline = "black",
+  major_yard_line = "black",
+  minor_yard_line = "black",
+  yardage_marker = "black",
+  endline = "black",
+  field_border = "black",
+  directional_arrow = "black"
+  
+)
+
 nfl_field <- function(xlims) {
   geom_football(
     league = "nfl",
@@ -31,7 +49,8 @@ nfl_field <- function(xlims) {
     y_trans = 26.6667,
     xlims = xlims,
     color_updates = field_params
-  )
+  ) 
+    
 }
 ```
 
@@ -426,7 +445,7 @@ anim <- p +
   transition_time(frameId)
 
 # Render the animation
-animate(anim, fps = fps, start_pause = 10)
+animate(anim, fps = fps, start_pause = 10, res = 100)
 ```
 
 
@@ -608,5 +627,81 @@ eir_df_right %>%
   tab_header(
     title = "Top 10 Right Edge Setters"
   )
+```
+
+
+
+# Niners vs Rams game play animation
+
+```{r}
+SFLA_full <- combined_data %>% filter(gameId == 2022100300)
+
+animation_data <- SFLA_full %>% filter(gamePlayId == "2022100300 1942")
+
+# Frame where you want to pause
+pause_frame <- animation_data$frameId_at_max_change[1]
+
+# Number of times to duplicate the pause frame (5 seconds * fps)
+fps <- 10 # frames per second
+pause_length <- fps * 5 
+
+
+# Duplicate the pause frame and create increasing frameIds
+pause_data <- animation_data %>% filter(frameId == pause_frame) %>% filter(nflId == ballCarrierId | nflId == edgeSetterId_atFrame)
+pause_data_replicated <- pause_data %>%
+  slice(rep(1, pause_length)) %>%
+  mutate(frameId = frameId + 0:(pause_length - 1))
+
+# Adjust frameId for subsequent frames in original data
+animation_data <- animation_data %>%
+  mutate(frameId = ifelse(frameId > pause_frame, frameId + pause_length, frameId))
+
+# Combine the original and duplicated frames
+animation_data <- bind_rows(animation_data, pause_data_replicated)
+
+# Sort the data by frameId
+animation_data <- animation_data %>% arrange(frameId)
+
+# Create the plot
+p <- nfl_field(c(0, 120)) +
+  geom_point(
+    data = animation_data %>% filter(club != "football"),
+    aes(x = x, y = y, color = club),
+    show.legend = FALSE,
+    size = 2
+  ) +
+  geom_point(
+    data = animation_data %>% filter(nflId == ballCarrierId), aes(x = x, y = y),
+    color = "#C8AA76",
+    show.legend = FALSE,
+    size = 2
+  ) +
+  geom_hline(data = animation_data %>% filter(nflId == edgeSetterId_atFrame), 
+             aes(yintercept = y), color = "#FFD100") +
+  geom_hline(data = animation_data %>% filter(nflId == edgeSetterId_atMaxChange) %>% filter(frameId <= 3), 
+             aes(yintercept = y), color = "#FFD100") +
+  geom_point(
+    data = animation_data %>% filter(nflId == edgeSetterId_atFrame), aes(x = x, y = y),
+    color = "#FFD100",
+    show.legend = FALSE,
+    size = 2
+    #size = 2 + (animation_data %>% filter(nflId == edgeSetterId_atFrame) %>% 
+     #             mutate(EIRscale = (edge_intensity_rating / 100)*2) %>% select(EIRscale) %>% pull())
+  ) +
+  # When frameId is less than 5 make edgeSetterId_at_max_change increase in size
+  geom_point(
+    data = animation_data %>% filter(nflId == edgeSetterId_atMaxChange) %>% filter(frameId <= 3), aes(x = x, y = y),
+    color = "#FFD100",
+    show.legend = FALSE,
+    size = 2
+  ) +
+  scale_color_manual(values = c("#003594", "#c9243f"))
+
+# Create the animation
+anim <- p +
+  transition_time(frameId)
+
+# Render the animation
+animate(anim, fps = fps, start_pause = 10, width = 1920, height = 1080, res = 250)
 ```
 
