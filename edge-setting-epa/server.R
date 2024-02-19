@@ -120,7 +120,7 @@ defense_change_plot <- function(plot_df) {
          x = "Directional Change", 
          y = " ",
          fill = "EPA")  +
-    scale_fill_gradient2(low = "darkblue", 
+    scale_fill_gradient2(low = "darkcyan", 
                          high = "firebrick4", 
                          midpoint = change_midpoint,
                          limits = c(-0.25, 0.1)) +
