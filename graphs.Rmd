@@ -69,7 +69,7 @@ EDA (to check work)
 
 Histogram of total change (angle change + orientation change)
 ```{r}
-ggplot(data = data, aes(x = total_change_at_max_change)) +
+ggplot(data = combined_data, aes(x = total_change_at_max_change)) +
   geom_histogram()
 ```
 
@@ -78,7 +78,7 @@ Filter the data: total change < 30 (where most of the data are)
 ```{r}
 # Did this in EIR
 max_range <- 30
-filtered_data <- filter(data, total_change_at_max_change < max_range)
+filtered_data <- filter(combined_data, total_change_at_max_change < max_range)
 ```
 
 
