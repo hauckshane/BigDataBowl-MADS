@@ -631,15 +631,139 @@ eir_df_right %>%
 
 
 
+
+# Some data prep
+```{r}
+edgeinfo <- combined_data %>% filter(nflId == edgeSetterId_atFrame) %>%
+  select(gamePlayId, frameId, nflId, 
+         ballCarrier_x, ballCarrier_y, ballCarrier_o, ballCarrier_s, ballCarrier_a, 
+         x, y, s, a, relative_o_to_ballCarrier) %>%
+   mutate(
+    # Convert orientations to radians
+    ballCarrier_o_rad = ballCarrier_o * (pi / 180),
+    edgeDef_o_rad = relative_o_to_ballCarrier * (pi / 180),
+
+    # Calculate components of velocity
+    ballCarrier_velocity_x = ballCarrier_s * cos(ballCarrier_o_rad),
+    ballCarrier_velocity_y = ballCarrier_s * sin(ballCarrier_o_rad),
+    edgeDef_velocity_x = s * cos(edgeDef_o_rad),
+    edgeDef_velocity_y = s * sin(edgeDef_o_rad),
+
+    # Calculate vector from edge setter to ball carrier
+    vector_to_ballCarrier_x = ballCarrier_x - x,
+    vector_to_ballCarrier_y = ballCarrier_y - y,
+
+    # Project speed of edge setter towards ball carrier
+    edgeDef_speed_towards_ballCarrier = (edgeDef_velocity_x * vector_to_ballCarrier_x +
+      edgeDef_velocity_y * vector_to_ballCarrier_y) /
+      sqrt(vector_to_ballCarrier_x^2 + vector_to_ballCarrier_y^2),
+    
+    # Calculate components of acceleration
+    ballCarrier_acceleration_x = ballCarrier_a * cos(ballCarrier_o_rad),
+    ballCarrier_acceleration_y = ballCarrier_a * sin(ballCarrier_o_rad),
+    edgeDef_acceleration_x = a * cos(edgeDef_o_rad),
+    edgeDef_acceleration_y = a * sin(edgeDef_o_rad),
+
+    # Calculate vector from edge defender to ball carrier
+    vector_to_ballCarrier_x = ballCarrier_x - x,
+    vector_to_ballCarrier_y = ballCarrier_y - y,
+
+    # Project acceleration of edge defender towards ball carrier
+    edgeDef_acceleration_towards_ballCarrier = (edgeDef_acceleration_x * vector_to_ballCarrier_x +
+                                                edgeDef_acceleration_y * vector_to_ballCarrier_y) /
+                                               sqrt(vector_to_ballCarrier_x^2 + vector_to_ballCarrier_y^2),
+
+  ) %>%
+  select(gamePlayId, frameId, edgeDef_speed_towards_ballCarrier, edgeDef_acceleration_towards_ballCarrier) 
+
+combined_data <- left_join(combined_data, edgeinfo, by = c("gamePlayId", "frameId"))
+
+normalized_EIR_ratings <- combined_data %>% 
+  mutate(frames_from_start = frameId - start_frameId) %>% 
+  filter(frameId >= start_frameId & frameId <= frameId_at_max_change + 1) %>%
+  filter(frames_from_start <= 30) %>%
+  filter(nflId == edgeSetterId_atFrame) %>%
+  mutate(
+    # Calculate edge defender's angle relative to ball carrier's ideal path
+    angle_toIdealPath = ifelse(playSide == "left",
+      (360 - ((angle_toballCarrier - ballCarrier_o) + 360) %% 360),
+      ((angle_toballCarrier - ballCarrier_o) + 360) %% 360
+    )
+  ) %>%
+  mutate(
+    # Normalization of variables on a scale of 0 to 1 (0 worse, 1 better)
+    
+    # Scaling variables where lower is better
+    
+    # Distance to ball carrier
+    scale_dist = 1 - 
+      (distance_from_ballCarrier - min(distance_from_ballCarrier, na.rm = TRUE)) / 
+      (max(distance_from_ballCarrier, na.rm = TRUE) - min(distance_from_ballCarrier, na.rm = TRUE)),
+    
+    # Speed of ball carrier
+    scale_s = 1 - 
+      (ballCarrier_s - min(ballCarrier_s, na.rm = TRUE)) / 
+      (max(ballCarrier_s, na.rm = TRUE) - min(ballCarrier_s, na.rm = TRUE)),
+    
+    # Acceleration of ball carrier
+    scale_a = 1 - 
+      (ballCarrier_a - min(ballCarrier_a, na.rm = TRUE)) / 
+      (max(ballCarrier_a, na.rm = TRUE) - min(ballCarrier_a, na.rm = TRUE)),
+    
+    # Time from handoff until edge is set
+    scale_time = 1 - 
+      (frames_from_start - min(frames_from_start, na.rm = TRUE)) / 
+      (max(frames_from_start, na.rm = TRUE) - min(frames_from_start, na.rm = TRUE)),
+
+    # Scaling variables where higher is better
+    
+    # Speed of defender towards ball carrier relative to how close a player is to ball carrier
+    edgeDef_speed_towards_bc_relative = edgeDef_speed_towards_ballCarrier * scale_dist,
+    scale_speed_towards_bc = 
+      ((edgeDef_speed_towards_bc_relative - min(edgeDef_speed_towards_bc_relative, na.rm = TRUE)) /
+      (max(edgeDef_speed_towards_bc_relative, na.rm = TRUE) - min(edgeDef_speed_towards_bc_relative, na.rm = TRUE))),
+    
+    # Acceleration of defender towards ball carrier
+    edgeDef_acceleration_towards_bc_relative = edgeDef_acceleration_towards_ballCarrier * scale_dist,
+    scale_acceleration_towards_bc = 
+      ((edgeDef_acceleration_towards_bc_relative - min(edgeDef_acceleration_towards_bc_relative, na.rm = TRUE)) /
+      (max(edgeDef_acceleration_towards_bc_relative, na.rm = TRUE) - min(edgeDef_acceleration_towards_bc_relative, na.rm = TRUE))),
+    
+    # Total change of ball carrier
+    scale_total_change = 
+      (total_change - min(total_change, na.rm = TRUE)) / 
+      (max(total_change, na.rm = TRUE) - min(total_change, na.rm = TRUE)),
+    
+    # Scaling degrees variables
+    
+    # Orientation of defender relative to ball carrier
+    scale_o_to_bc = ((cos(pi * relative_o_to_ballCarrier / 180) + 1) / 2) * scale_dist,  
+    
+    # Angle of defender relative to ball carrier's ideal path
+    scale_angle_to_path = ((cos(pi * angle_toIdealPath / 180) + 1) / 2) * scale_dist,
+    
+  ) %>%
+  mutate(normalize_EIR = (edge_intensity_rating_no_time - min(edge_intensity_rating_no_time, na.rm = TRUE)) / 
+           (max(edge_intensity_rating_no_time, na.rm = TRUE) - min(edge_intensity_rating_no_time, na.rm = TRUE))) %>%
+  select(gamePlayId, frameId, scale_dist, scale_s, scale_a, scale_time, 
+         scale_speed_towards_bc, scale_acceleration_towards_bc, scale_total_change, 
+         scale_o_to_bc, scale_angle_to_path, normalize_EIR) 
+
+combined_data <- left_join(combined_data, normalized_EIR_ratings, by = c("gamePlayId", "frameId")) 
+  
+```
+
 # Niners vs Rams game play animation
 
 ```{r}
 SFLA_full <- combined_data %>% filter(gameId == 2022100300)
 
+# 2022100300 3793
+#2022100300 1942
 animation_data <- SFLA_full %>% filter(gamePlayId == "2022100300 1942")
 
 # Frame where you want to pause
-pause_frame <- animation_data$frameId_at_max_change[1]
+pause_frame <- animation_data$frameId_at_max_change[1] - 1
 
 # Number of times to duplicate the pause frame (5 seconds * fps)
 fps <- 10 # frames per second
@@ -672,7 +796,7 @@ p <- nfl_field(c(0, 120)) +
   ) +
   geom_point(
     data = animation_data %>% filter(nflId == ballCarrierId), aes(x = x, y = y),
-    color = "#C8AA76",
+    color = "white",
     show.legend = FALSE,
     size = 2
   ) +
@@ -704,4 +828,143 @@ anim <- p +
 # Render the animation
 animate(anim, fps = fps, start_pause = 10, width = 1920, height = 1080, res = 250)
 ```
+
+# Graph Animation
+```{r}
+animating_graphs <- animation_data %>% 
+  group_by(frameId)  %>%
+  distinct(frameId, edge_intensity_rating_no_time, normalize_total_change) 
+
+p3 <- ggplot(animating_graphs, aes(x = frameId - first(animation_data$start_frameId))) +
+  geom_line(aes(y = normalize_total_change, color = "Ball Carrier\nDirection Change"), linewidth = 2) +
+  geom_line(data = animating_graphs %>% group_by(frameId) %>%
+              filter(edge_intensity_rating_no_time == max(edge_intensity_rating_no_time, na.rm = TRUE)),
+            aes(y = edge_intensity_rating_no_time, color = "Edge Intensity\nRating"), linewidth = 2) +
+  transition_reveal(frameId) +
+  geom_vline(xintercept = animation_data$frameId_at_max_change - first(animation_data$start_frameId) - 1, color = "black", linetype = "dashed") +
+  geom_vline(xintercept = animation_data$frameId_at_max_change - first(animation_data$start_frameId), color = "black", linetype = "dashed") +
+  scale_x_continuous(breaks = seq(first(animation_data$start_frameId)+1 - first(animation_data$start_frameId),
+                                  first(animation_data$frameId_at_max_change) - first(animation_data$start_frameId), 
+                                  1), 
+                     limits = c(first(animation_data$start_frameId)+1 - first(animation_data$start_frameId),
+                                first(animation_data$frameId_at_max_change) - first(animation_data$start_frameId))) +
+  scale_color_manual(values = c("Edge Intensity\nRating" = "purple", "Ball Carrier\nDirection Change" = "grey30"),
+                     breaks = c("Edge Intensity\nRating", "Ball Carrier\nDirection Change")) +
+  scale_y_continuous(limits = c(0,.75)) +
+  labs(title = "As Edge Intensity Rating Increases, Ball Carrier\nTotal Change in Direction Increases",
+       subtitle = "*With time not factored into EIR.",
+       x = "Frames After Handoff", y = "Normalized Value", color = "Legend:") +
+  # Remove grid lines
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank()
+  ) +
+  theme(
+        axis.text.x = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        plot.title = element_text(size = 18),
+        plot.subtitle = element_text(size = 14),
+        plot.caption = element_text(size = 12),
+        legend.key.size = unit(1, "cm"),
+        legend.text = element_text(size = 12))
+```
+
+```{r}
+library(magick)
+field_g <- animate(anim, fps = fps, start_pause = 10, width = 1920, height = 1080, res = 250)
+image_write(field_g, "field.gif")
+field_gif <- image_read("field.gif")
+cropped_image <- image_crop(field_gif, "960x1080+100+0")
+rotated_image <- image_rotate(cropped_image, -90)
+rotated_image <- image_crop(rotated_image, "1000x860+0+0")
+image_write(rotated_image, "field.gif")
+field_gif <- image_read("field.gif")
+graph_g <- animate(p3, fps = 10, start_pause = 10, width = 1200, height = 800, res = 250)
+image_write(graph_g, "graph.gif")
+graph_gif <- image_read("graph.gif")
+
+comb_gif <- image_append(c(field_gif[1], graph_gif[1]), stack = FALSE)
+for(i in 2:100){
+  combined <- image_append(c(field_gif[i], graph_gif[i]), stack = FALSE)
+  comb_gif <- c(comb_gif, combined)
+}
+comb_gif
+```
+
+
+```{r}
+animating_graphs <- animation_data %>% 
+  filter(nflId == edgeSetterId_atFrame | is.na(scale_s)) %>%
+  group_by(frameId)  %>%
+  distinct(frameId, edge_intensity_rating_no_time, 
+           scale_total_change, scale_s, scale_a,
+           scale_dist, scale_speed_towards_bc, scale_acceleration_towards_bc, 
+           scale_o_to_bc, scale_angle_to_path,
+           scale_time 
+           ) 
+
+
+p3 <- ggplot(animating_graphs, aes(x = frameId - first(animation_data$start_frameId))) +
+  geom_line(aes(y = scale_total_change, color = "Ball Carrier\nDirection Change"), alpha = 0.1, lwd = 1.5) +
+  geom_line(aes(y = scale_s, color = "Ball Carrier Speed"), alpha = 0.1, lwd = 1.5) +
+  geom_line(aes(y = scale_a, color = "Ball Carrier Acceleration"), alpha = 0.1, lwd = 1.5) +
+  geom_line(aes(y = scale_dist, color = "Distance to\nBall Carrier"), alpha = 0.1, lwd = 1.5) +
+  geom_line(aes(y = scale_speed_towards_bc, color = "Speed Towards\nBall Carrier"), alpha = 0.1, lwd = 1.5) +
+  geom_line(aes(y = scale_acceleration_towards_bc, color = "Acceleration Towards\nBall Carrier"), alpha = 0.1, lwd = 1.5) +
+  geom_line(aes(y = scale_o_to_bc, color = "Orientation to\nBall Carrier"), alpha = 0.1, lwd = 1.5) +
+  geom_line(aes(y = scale_angle_to_path, color = "Angle to Path"), alpha = 0.1, lwd = 1.5) +
+  geom_line(aes(y = scale_time, color = "Time"), alpha = 0.1, lwd = 1.5) +
+  geom_line(data = animating_graphs %>% group_by(frameId) %>%
+              filter(edge_intensity_rating_no_time == max(edge_intensity_rating_no_time, na.rm = TRUE)),
+            aes(y = edge_intensity_rating_no_time, color = "Edge Intensity\nRating"), linewidth = 3) +
+  transition_reveal(frameId) +
+  geom_vline(xintercept = animation_data$frameId_at_max_change - first(animation_data$start_frameId) - 1, color = "black", linetype = "dashed") +
+  geom_vline(xintercept = animation_data$frameId_at_max_change - first(animation_data$start_frameId), color = "black", linetype = "dashed") +
+  scale_x_continuous(breaks = seq(first(animation_data$start_frameId)+1 - first(animation_data$start_frameId),
+                                  first(animation_data$frameId_at_max_change) - first(animation_data$start_frameId), 
+                                  1), 
+                     limits = c(first(animation_data$start_frameId)+1 - first(animation_data$start_frameId),
+                                first(animation_data$frameId_at_max_change) - first(animation_data$start_frameId))) +
+  scale_color_manual(values = c("Edge Intensity\nRating" = "gold", 
+                                "Ball Carrier\nDirection Change" = "firebrick1",
+                                "Ball Carrier Speed" = "firebrick3",
+                                "Ball Carrier Acceleration" = "firebrick4",
+                                "Distance to\nBall Carrier" = "dodgerblue",
+                                "Speed Towards\nBall Carrier" = "dodgerblue2",
+                                "Acceleration Towards\nBall Carrier" = "dodgerblue3",
+                                "Orientation to\nBall Carrier" = "dodgerblue4",
+                                "Angle to Path" = "dodgerblue1",
+                                "Time" = "limegreen"),
+                     breaks = c("Edge Intensity\nRating", 
+                                "Ball Carrier\nDirection Change", 
+                                "Ball Carrier Speed",
+                                "Ball Carrier Acceleration",
+                                "Distance to\nBall Carrier",
+                                "Speed Towards\nBall Carrier",
+                                "Acceleration Towards\nBall Carrier",
+                                "Orientation to\nBall Carrier",
+                                "Angle to Path",
+                                "Time")) +
+  scale_y_continuous(limits = c(0,1)) +
+  labs(title = "As Edge Intensity Rating Increases, Ball Carrier\nTotal Change in Direction Increases",
+       subtitle = "*With time not factored into EIR.",
+       x = "Frames After Handoff", y = "Normalized Value", color = "Legend:") +
+  # Remove grid lines
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank()
+  ) +
+  theme(
+        axis.text.x = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        plot.title = element_text(size = 18),
+        plot.subtitle = element_text(size = 14),
+        plot.caption = element_text(size = 12),
+        legend.key.size = unit(1, "cm"),
+        legend.text = element_text(size = 12))
+```
+
+
 
