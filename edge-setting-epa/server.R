@@ -162,7 +162,7 @@ defense_playside_plot <- function(plot_df) {
     geom_text(aes(label = mode_type), 
               position = position_stack(vjust = 0.5), 
               color = "black", size = 3) +
-    scale_fill_gradient2(low = "darkblue", 
+    scale_fill_gradient2(low = "darkcyan", 
                          high = "firebrick4", 
                          midpoint = playside_midpoint,
                          limits = c(-0.55, 0.55)) +
@@ -198,7 +198,7 @@ eir_table_left <- function(plot_df) {
     data_color(
       columns = c("Avg EPA"),
       fn = scales::col_numeric(
-        palette = c("darkblue", "lightblue"),
+        palette = c("darkcyan", "lightcyan"),
         domain = NULL
       )
     ) %>% 
@@ -228,7 +228,7 @@ eir_table_right <- function(plot_df) {
     data_color(
       columns = c("Avg EPA"),
       fn = scales::col_numeric(
-        palette = c("darkblue", "lightblue"),
+        palette = c("darkcyan", "lightcyan"),
         domain = NULL
       )
     ) %>% 
