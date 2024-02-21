@@ -68,7 +68,7 @@ playside_df <- df %>%
                       breaks = seq(-max_range, 
                                    max_range, 
                                    (max_range * 2) / n_buckets_playside)))%>%
-  group_by(playSide, bucket) %>%
+  group_by(playSide, bucket, defensiveTeam) %>%
   mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", 
                                            as.character(bucket))),
          bucket_angle_max = as.numeric(gsub("\\[|\\]", "", 
@@ -167,7 +167,7 @@ defense_playside_plot <- function(plot_df) {
     scale_fill_gradient2(low = "darkcyan", 
                          high = "firebrick4", 
                          midpoint = playside_midpoint,
-                         limits = c(-0.55, 0.55)) +
+                         limits = c(min(change_df$meanEPA), max(change_df$meanEPA))) +
     facet_wrap(~playSidedescr) +
     theme_minimal() +
     theme(axis.text.y = element_blank(),
