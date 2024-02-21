@@ -16,16 +16,18 @@ library(nflfastR)
 
 # Read in the data for Defense plots and tables
 df <- read.csv("filtered_processed_data.csv")
-eir_df <- read.csv("eir_epa.csv")
+eir_df <- read.csv("eir_epa.csv") %>% select(-X)
 # Round values to 2 decimal places
 eir_df$setting_freq <- round(eir_df$setting_freq, 2)
 eir_df$pretty_freq <- paste0(eir_df$setting_freq * 100, "%")
 eir_df$meanEIR <- round(eir_df$meanEIR, 2)
 eir_df$meanTime <- round(eir_df$meanTime, 2)
+eir_df$freqEIR <- round(eir_df$setting_freq * eir_df$meanEIR, 4)
+eir_df$percentile <- round(percent_rank(eir_df$freqEIR),3) * 100
 # Make pretty column names
-names(eir_df) <- c("X", "Team", "Name", "Playside", "Num. Plays",
-                   "Num. Plays for Player", "prop", "Avg Time",
-                   "Avg EIR", "Avg EPA", "Setting Freq")
+names(eir_df) <- c("Team", "Name", "Playside", "Num. Plays",
+                       "Num. Plays for Player", "prop", "Avg Time",
+                       "Avg EIR", "Avg EPA", "Setting Freq", "Weighted EIR", "Percentile")
 
 # Set the relative_total_change range for viewing graphs
 max_range <- 30
@@ -46,7 +48,7 @@ change_df <- df %>%
                       breaks = seq(-max_range, 
                                    max_range, 
                                    (max_range * 2) / n_buckets))) %>% 
-  group_by(bucket) %>% 
+  group_by(bucket, defensiveTeam) %>% 
   mutate(bucket_angle_min = as.numeric(sub("\\((.*),.*", "\\1", 
                                            as.character(bucket))),
          bucket_angle_max = as.numeric(gsub("\\[|\\]", "", 
@@ -123,7 +125,7 @@ defense_change_plot <- function(plot_df) {
     scale_fill_gradient2(low = "darkcyan", 
                          high = "firebrick4", 
                          midpoint = change_midpoint,
-                         limits = c(-0.25, 0.1)) +
+                         limits = c(min(change_df$meanEPA), max(change_df$meanEPA))) +
     theme_minimal() +
     theme(axis.text.y = element_blank(),
           axis.ticks.y = element_blank(),
@@ -185,21 +187,25 @@ eir_table_left <- function(plot_df) {
     filter(Playside == "left") %>%
     filter('Num. Plays for Player' >= 5)
   
-  plot_df <- plot_df[order(-plot_df$prop), ]
+  plot_df <- plot_df[order(-plot_df$Percentile), ]
   
   table <- plot_df %>%
     head(5) %>%
-    select('Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA') %>%
+    select('Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA', 'Percentile') %>%
     gt() %>%
     fmt_number(
       columns = c("Avg EPA"), 
       decimals = 2
     ) %>%
+    fmt_number(
+      columns = c("Percentile"), 
+      decimals = 2
+    ) %>%
     data_color(
-      columns = c("Avg EPA"),
+      columns = c("Percentile"),
       fn = scales::col_numeric(
-        palette = c("darkcyan", "lightcyan"),
-        domain = NULL
+        palette = c("darkred", "pink", "lightcyan", "darkcyan"),
+        domain = c(25,100)
       )
     ) %>% 
     tab_header(
@@ -215,21 +221,25 @@ eir_table_right <- function(plot_df) {
     filter(Playside == "right") %>%
     filter('Num. Plays for Player' >= 5)
   
-  plot_df <- plot_df[order(-plot_df$prop), ]
+  plot_df <- plot_df[order(-plot_df$Percentile), ]
   
   table <- plot_df %>%
     head(5) %>%
-    select('Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA') %>%
+    select('Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA', 'Percentile') %>%
     gt() %>%
     fmt_number(
       columns = c("Avg EPA"), 
       decimals = 2
     ) %>%
+    fmt_number(
+      columns = c("Percentile"), 
+      decimals = 2
+    ) %>%
     data_color(
-      columns = c("Avg EPA"),
+      columns = c("Percentile"),
       fn = scales::col_numeric(
-        palette = c("darkcyan", "lightcyan"),
-        domain = NULL
+        palette = c("darkred", "pink", "lightcyan", "darkcyan"),
+        domain = c(25,100)
       )
     ) %>% 
     tab_header(
@@ -265,8 +275,8 @@ team_table_left <- function(plot_df) {
     data_color(
       columns = c("Avg EPA"),
       fn = scales::col_numeric(
-        palette = c("pink", "darkred"),
-        domain = NULL
+        palette = c("darkcyan", "lightcyan", "pink", "darkred"),
+        domain = c(-1, 1)
       )
     ) %>% 
     tab_header(
@@ -289,8 +299,8 @@ team_table_right <- function(plot_df) {
     data_color(
       columns = c("Avg EPA"),
       fn = scales::col_numeric(
-        palette = c("pink", "darkred"),
-        domain = NULL
+        palette = c("darkcyan", "lightcyan", "pink", "darkred"),
+        domain = c(-1, 1)
       )
     ) %>% 
     tab_header(
