@@ -556,7 +556,7 @@ comb_gif
 # Top 10 Edge Setters Table
 
 ```{r}
-eir_df <- read.csv("edge-setting-epa/eir_epa.csv")
+eir_df <- read.csv("edge-setting-epa/eir_epa.csv") %>% select(-1)
 ```
 
 Clean eir_df for plot purposes.
@@ -566,28 +566,30 @@ eir_df$setting_freq <- round(eir_df$setting_freq, 2)
 eir_df$pretty_freq <- paste0(eir_df$setting_freq * 100, "%")
 eir_df$meanEIR <- round(eir_df$meanEIR, 2)
 eir_df$meanTime <- round(eir_df$meanTime, 2)
+eir_df$freqEIR <- round(eir_df$setting_freq * eir_df$meanEIR, 4)
+eir_df$percentile <- round(percent_rank(eir_df$freqEIR),3) * 100
 ```
 
 
 ## EIR left table
 ```{r}
 eir_df_left <- eir_df %>%
-    filter(playSide == "left") %>%
-    filter(n_player_plays  >= 10)
+    filter(playSide == "left")
   
 eir_df_left <- eir_df_left[order(-eir_df_left$meanEIR), ]
+eir_df_left <- eir_df_left[order(-eir_df_left$freqEIR), ]
 
 # Make pretty column names
 names(eir_df_left) <- c("Team", "Name", "Playside", "Num. Plays",
                    "Num. Plays for Player", "prop", "Avg Time",
-                   "Avg EIR", "Avg EPA", "Setting Freq")
+                   "Avg EIR", "Avg EPA", "Setting Freq", "Weighted EIR", "Percentile")
 
 drops <- c("Playside")
 eir_df_left <- eir_df_left[ , !(names(eir_df_left) %in% drops)]
 
 eir_df_left %>%
   head(10) %>%
-  select('Team', 'Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA') %>%
+  select('Team', 'Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA', "Percentile") %>%
   gt() %>%
   fmt_number(
     columns = c("Avg EPA"), 
@@ -603,22 +605,22 @@ eir_df_left %>%
 ## Top 10 EIR right
 ```{r}
 eir_df_right <- eir_df %>%
-    filter(playSide == "right") %>%
-    filter(n_player_plays  >= 10)
+    filter(playSide == "right")
   
 eir_df_right <- eir_df_right[order(-eir_df_right$meanEIR), ]
+eir_df_right <- eir_df_right[order(-eir_df_right$freqEIR), ]
 
 # Make pretty column names
 names(eir_df_right) <- c("Team", "Name", "Playside", "Num. Plays",
                    "Num. Plays for Player", "prop", "Avg Time",
-                   "Avg EIR", "Avg EPA", "Setting Freq")
+                   "Avg EIR", "Avg EPA", "Setting Freq", "Weighted EIR", "Percentile")
 
 drops <- c("Playside")
 eir_df_right <- eir_df_right[ , !(names(eir_df_right) %in% drops)]
 
 eir_df_right %>%
   head(10) %>%
-  select('Team', 'Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA') %>%
+  select('Team', 'Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA', "Percentile") %>%
   gt() %>%
   fmt_number(
     columns = c("Avg EPA"), 
@@ -760,7 +762,7 @@ SFLA_full <- combined_data %>% filter(gameId == 2022100300)
 
 # 2022100300 3793
 #2022100300 1942
-animation_data <- SFLA_full %>% filter(gamePlayId == "2022100300 1942")
+animation_data <- SFLA_full %>% filter(gamePlayId == "2022100300 3793")
 
 # Frame where you want to pause
 pause_frame <- animation_data$frameId_at_max_change[1] - 1
@@ -771,7 +773,8 @@ pause_length <- fps * 5
 
 
 # Duplicate the pause frame and create increasing frameIds
-pause_data <- animation_data %>% filter(frameId == pause_frame) %>% filter(nflId == ballCarrierId | nflId == edgeSetterId_atFrame)
+pause_data <- animation_data %>% filter(frameId == pause_frame) %>% 
+  filter(nflId == ballCarrierId | nflId == edgeSetterId_atFrame)
 pause_data_replicated <- pause_data %>%
   slice(rep(1, pause_length)) %>%
   mutate(frameId = frameId + 0:(pause_length - 1))
@@ -906,18 +909,28 @@ animating_graphs <- animation_data %>%
 
 
 p3 <- ggplot(animating_graphs, aes(x = frameId - first(animation_data$start_frameId))) +
-  geom_line(aes(y = scale_total_change, color = "Ball Carrier\nDirection Change"), alpha = 0.1, lwd = 1.5) +
-  geom_line(aes(y = scale_s, color = "Ball Carrier Speed"), alpha = 0.1, lwd = 1.5) +
-  geom_line(aes(y = scale_a, color = "Ball Carrier Acceleration"), alpha = 0.1, lwd = 1.5) +
-  geom_line(aes(y = scale_dist, color = "Distance to\nBall Carrier"), alpha = 0.1, lwd = 1.5) +
-  geom_line(aes(y = scale_speed_towards_bc, color = "Speed Towards\nBall Carrier"), alpha = 0.1, lwd = 1.5) +
-  geom_line(aes(y = scale_acceleration_towards_bc, color = "Acceleration Towards\nBall Carrier"), alpha = 0.1, lwd = 1.5) +
-  geom_line(aes(y = scale_o_to_bc, color = "Orientation to\nBall Carrier"), alpha = 0.1, lwd = 1.5) +
-  geom_line(aes(y = scale_angle_to_path, color = "Angle to Path"), alpha = 0.1, lwd = 1.5) +
-  geom_line(aes(y = scale_time, color = "Time"), alpha = 0.1, lwd = 1.5) +
+  geom_line(aes(y = scale_total_change, 
+                color = factor("Ball Carrier Metrics")), alpha = 0.25, lwd = 1.5) +
+  geom_line(aes(y = scale_s, 
+                color = factor("Ball Carrier Metrics")), alpha = 0.25, lwd = 1.5) +
+  geom_line(aes(y = scale_a, 
+                color = factor("Ball Carrier Metrics")), alpha = 0.25, lwd = 1.5) +
+  geom_line(aes(y = scale_dist, 
+                color = factor("Edge Setter Metrics")), alpha = 0.25, lwd = 1.5) +
+  geom_line(aes(y = scale_speed_towards_bc, 
+                color = factor("Edge Setter Metrics")), alpha = 0.25, lwd = 1.5) +
+  geom_line(aes(y = scale_acceleration_towards_bc, 
+                color = factor("Edge Setter Metrics")), alpha = 0.25, lwd = 1.5) +
+  geom_line(aes(y = scale_o_to_bc, 
+                color = factor("Edge Setter Metrics")), alpha = 0.25, lwd = 1.5) +
+  geom_line(aes(y = scale_angle_to_path, 
+                color = factor("Edge Setter Metrics")), alpha = 0.25, lwd = 1.5) +
+  geom_line(aes(y = scale_time, 
+                color = factor("Time")), alpha = 0.25, lwd = 1.5) +
   geom_line(data = animating_graphs %>% group_by(frameId) %>%
               filter(edge_intensity_rating_no_time == max(edge_intensity_rating_no_time, na.rm = TRUE)),
-            aes(y = edge_intensity_rating_no_time, color = "Edge Intensity\nRating"), linewidth = 3) +
+            aes(y = edge_intensity_rating_no_time, 
+                color = factor("Edge Intensity Rating")), linewidth = 2.5) +
   transition_reveal(frameId) +
   geom_vline(xintercept = animation_data$frameId_at_max_change - first(animation_data$start_frameId) - 1, color = "black", linetype = "dashed") +
   geom_vline(xintercept = animation_data$frameId_at_max_change - first(animation_data$start_frameId), color = "black", linetype = "dashed") +
@@ -926,29 +939,16 @@ p3 <- ggplot(animating_graphs, aes(x = frameId - first(animation_data$start_fram
                                   1), 
                      limits = c(first(animation_data$start_frameId)+1 - first(animation_data$start_frameId),
                                 first(animation_data$frameId_at_max_change) - first(animation_data$start_frameId))) +
-  scale_color_manual(values = c("Edge Intensity\nRating" = "gold", 
-                                "Ball Carrier\nDirection Change" = "firebrick1",
-                                "Ball Carrier Speed" = "firebrick3",
-                                "Ball Carrier Acceleration" = "firebrick4",
-                                "Distance to\nBall Carrier" = "dodgerblue",
-                                "Speed Towards\nBall Carrier" = "dodgerblue2",
-                                "Acceleration Towards\nBall Carrier" = "dodgerblue3",
-                                "Orientation to\nBall Carrier" = "dodgerblue4",
-                                "Angle to Path" = "dodgerblue1",
-                                "Time" = "limegreen"),
-                     breaks = c("Edge Intensity\nRating", 
-                                "Ball Carrier\nDirection Change", 
-                                "Ball Carrier Speed",
-                                "Ball Carrier Acceleration",
-                                "Distance to\nBall Carrier",
-                                "Speed Towards\nBall Carrier",
-                                "Acceleration Towards\nBall Carrier",
-                                "Orientation to\nBall Carrier",
-                                "Angle to Path",
+  scale_color_manual(values = c("Edge Intensity Rating" = "firebrick2", 
+                                "Ball Carrier Metrics" = "lightgoldenrod3",
+                                "Edge Setter Metrics" = "palegreen3",
+                                "Time" = "steelblue1"),
+                     breaks = c("Edge Intensity Rating", 
+                                "Ball Carrier Metrics",
+                                "Edge Setter Metrics",
                                 "Time")) +
   scale_y_continuous(limits = c(0,1)) +
-  labs(title = "As Edge Intensity Rating Increases, Ball Carrier\nTotal Change in Direction Increases",
-       subtitle = "*With time not factored into EIR.",
+  labs(title = "Edge Intensity Level as the\nPlay Develops",
        x = "Frames After Handoff", y = "Normalized Value", color = "Legend:") +
   # Remove grid lines
   theme(
@@ -963,8 +963,28 @@ p3 <- ggplot(animating_graphs, aes(x = frameId - first(animation_data$start_fram
         plot.subtitle = element_text(size = 14),
         plot.caption = element_text(size = 12),
         legend.key.size = unit(1, "cm"),
-        legend.text = element_text(size = 12))
+        legend.text = element_text(size = 10))
 ```
 
 
+```{r}
+library(magick)
+field_g <- animate(anim, fps = fps, start_pause = 10, width = 1920, height = 1080, res = 250)
+image_write(field_g, "field.gif")
+field_gif <- image_read("field.gif")
+cropped_image <- image_crop(field_gif, "960x1080+100+0")
+rotated_image <- image_rotate(cropped_image, -90)
+rotated_image <- image_crop(rotated_image, "1000x860+0+0")
+image_write(rotated_image, "field.gif")
+field_gif <- image_read("field.gif")
+graph_g <- animate(p3, fps = 10, start_pause = 10, width = 1300, height = 800, res = 250)
+image_write(graph_g, "graph.gif")
+graph_gif <- image_read("graph.gif")
 
+comb_gif <- image_append(c(field_gif[1], graph_gif[1]), stack = FALSE)
+for(i in 2:100){
+  combined <- image_append(c(field_gif[i], graph_gif[i]), stack = FALSE)
+  comb_gif <- c(comb_gif, combined)
+}
+comb_gif
+```

@@ -18,11 +18,22 @@ library(gt)
 ```{r}
 BC_ES_data <- read_csv("data/BC_and_ES_information.csv") %>% select(-1)
 players <- read_csv("data/players.csv")
+allEIR <- read_csv("data/allEIR.csv")
 
-tables_df <- left_join(BC_ES_data, players %>% select(nflId, position, displayName), by = c("ballCarrierId" = "nflId")) %>%
+# tables_df <- left_join(BC_ES_data, players %>% select(nflId, position, displayName),
+#                      by = c("ballCarrierId" = "nflId")) %>%
+# rename(BC_position = position, BC_name = displayName) %>%
+# left_join(players %>% select(nflId, position, displayName), by = c("edgeSetterId_atMaxChange" = "nflId")) %>%
+# rename(ES_position = position, ES_name = displayName)
+
+# Changed this to include all players considered to be setting the edge not just the player with highest rating
+tables_df <- left_join(allEIR, players %>% select(nflId, position, displayName), 
+                       by = c("ballCarrierId" = "nflId")) %>%
   rename(BC_position = position, BC_name = displayName) %>%
   left_join(players %>% select(nflId, position, displayName), by = c("edgeSetterId_atMaxChange" = "nflId")) %>%
-  rename(ES_position = position, ES_name = displayName) 
+  rename(ES_position = position, ES_name = displayName) %>%
+  left_join(players %>% select(nflId, position, displayName), by = c("nflId")) %>%
+  rename(secondary_ES_position = position, secondary_ES_name = displayName)
 ```
 
 # Making tables for the Shiny app Defense view
@@ -42,16 +53,35 @@ eir_df <- eir_df %>%
   group_by(defensiveTeam, playSide) %>%
   mutate(n_plays = n()) %>%
   group_by(defensiveTeam, playSide, ES_name) %>%
-  mutate(n_player_plays = n()) %>%
+  #Changed to count number of plays for primary edge setter
+  mutate(n_player_plays = sum(ifelse(ES_name == secondary_ES_name, 1, 0))) %>% 
   group_by(ES_name) %>%
   mutate(setting_freq = n_player_plays / n_plays)
+
+# eir_df <- eir_df %>%
+#   group_by(defensiveTeam, playSide) %>%
+#   mutate(n_plays = n()) %>%
+#   group_by(defensiveTeam, playSide, ES_name) %>%
+#   #Changed to count number of plays for primary edge setter
+#   mutate(n_player_plays = n()) %>% 
+#   group_by(ES_name) %>%
+#   mutate(setting_freq = n_player_plays / n_plays)
 
 # Average EIR and EPA for each player when they are setting the edge
 eir_df <- eir_df %>%
   group_by(playSide, ES_name) %>%
   mutate(meanEIR = mean(max_EIR_atMaxChange), 
-         meanEPA = mean(expectedPointsAdded),
-         meanTime = mean(time))
+         # Changed these two lines to only include the player's performance when they are primary edge setter
+         meanEPA = mean(ifelse(ES_name == secondary_ES_name, expectedPointsAdded, NA), na.rm = T),  
+         meanTime = mean(ifelse(ES_name == secondary_ES_name, time, NA), na.rm = T))
+
+# # Average EIR and EPA for each player when they are setting the edge
+# eir_df <- eir_df %>%
+#   group_by(playSide, ES_name) %>%
+#   mutate(meanEIR = mean(max_EIR_atMaxChange), 
+#          # Changed these two lines to only include the player's performance when they are primary edge setter
+#          meanEPA = mean(expectedPointsAdded),  
+#          meanTime = mean(time))
 
 # Select only the values we want for the table
 eir_df <- eir_df %>%

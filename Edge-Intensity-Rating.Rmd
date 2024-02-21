@@ -322,7 +322,8 @@ maxChangesEIR <- all_data %>%
   filter(frameId == frameId_at_max_change) %>%
   distinct(gamePlayId, playSide, possessionTeam, ballCarrierId, defensiveTeam, edgeSetterId_atMaxChange, 
            frames_from_start_atMaxChange, total_change_at_max_change, relative_total_change,
-           max_EIR_atMaxChange, expectedPointsAdded, edge_intensity_rating_no_time)
+           max_EIR_atMaxChange, expectedPointsAdded, edge_intensity_rating, edge_intensity_rating_no_time) %>%
+  filter(!is.na(edge_intensity_rating))
 ``` 
 
 
@@ -331,6 +332,17 @@ Check distribution of maxChangesEIR.
 ggplot(maxChangesEIR, aes(x = max_EIR_atMaxChange)) +
   geom_histogram(bins = 10) 
 ```
+
+All EIR
+```{r}
+allEIR <- all_data %>%
+  filter(frameId == frameId_at_max_change) %>%
+  distinct(gamePlayId, playSide, possessionTeam, ballCarrierId, defensiveTeam, nflId, edgeSetterId_atMaxChange, 
+           frames_from_start_atMaxChange, total_change_at_max_change, relative_total_change,
+           max_EIR_atMaxChange, expectedPointsAdded, edge_intensity_rating, edge_intensity_rating_no_time) %>%
+  filter(!is.na(edge_intensity_rating))
+```
+
 
 
 # Save the resulting data
@@ -343,5 +355,8 @@ write.csv(maxChangesEIR, "data/BC_and_ES_information.csv")
 write.csv(all_data, "data/all_processed_data.csv")
 ```
 
+```{r}
+write.csv(allEIR, "data/allEIR.csv")
+```
 
 
