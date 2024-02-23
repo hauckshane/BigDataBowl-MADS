@@ -597,7 +597,12 @@ eir_df_left %>%
   ) %>% 
   tab_header(
     title = "Top 10 Left Edge Setters"
-  )
+  ) %>% data_color(
+    columns = c("Percentile"),
+    fn = scales::col_numeric(
+      palette = c("lightblue", "darkblue"),
+      domain = NULL
+    ))
 
 ```
 
@@ -628,7 +633,12 @@ eir_df_right %>%
   ) %>% 
   tab_header(
     title = "Top 10 Right Edge Setters"
-  )
+  ) %>% data_color(
+    columns = c("Percentile"),
+    fn = scales::col_numeric(
+      palette = c("pink", "firebrick4"),
+      domain = NULL
+    ))
 ```
 
 

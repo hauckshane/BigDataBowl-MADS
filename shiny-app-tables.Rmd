@@ -18,7 +18,7 @@ library(gt)
 ```{r}
 BC_ES_data <- read_csv("data/BC_and_ES_information.csv") %>% select(-1)
 players <- read_csv("data/players.csv")
-allEIR <- read_csv("data/allEIR.csv")
+allEIR <- read_csv("allEIR.csv")
 
 # tables_df <- left_join(BC_ES_data, players %>% select(nflId, position, displayName),
 #                      by = c("ballCarrierId" = "nflId")) %>%
@@ -104,6 +104,7 @@ hist(eir_df$meanEIR)
 ```
 
 
+
 # Making tables for the Shiny app Offense view
 
 ## Team Offense View
@@ -175,6 +176,7 @@ write.csv(team_table_df, "edge-setting-epa/team_routes_epa.csv")
 ```
 
 
+
 <!-- ## Player Offense View -->
 
 <!-- We want to show "players to watch", i.e. the offense team's runningbacks  -->
@@ -210,4 +212,5 @@ write.csv(team_table_df, "edge-setting-epa/team_routes_epa.csv")
 <!-- ```{r} -->
 <!-- write.csv(player_table_df, "edge-setting-epa/player_routes_epa.csv") -->
 <!-- ``` -->
+
 
