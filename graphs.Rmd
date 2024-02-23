@@ -600,7 +600,12 @@ eir_df_left %>%
   ) %>% data_color(
     columns = c("Percentile"),
     fn = scales::col_numeric(
-      palette = c("lightblue", "darkblue"),
+      palette = c("lightcyan", "darkcyan"),
+      domain = NULL
+    )) %>% data_color(
+    columns = c("Avg EPA"),
+    fn = scales::col_numeric(
+      palette = c("darkcyan", "white", "firebrick4"),
       domain = NULL
     ))
 
@@ -636,7 +641,12 @@ eir_df_right %>%
   ) %>% data_color(
     columns = c("Percentile"),
     fn = scales::col_numeric(
-      palette = c("pink", "firebrick4"),
+      palette = c("lightcyan", "darkcyan"),
+      domain = NULL
+    )) %>% data_color(
+    columns = c("Avg EPA"),
+    fn = scales::col_numeric(
+      palette = c("darkcyan", "white", "firebrick4"),
       domain = NULL
     ))
 ```
