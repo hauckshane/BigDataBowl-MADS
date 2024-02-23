@@ -571,7 +571,7 @@ eir_df$percentile <- round(percent_rank(eir_df$freqEIR),3) * 100
 ```
 
 
-## EIR left table
+## Top 10 EIR left
 ```{r}
 eir_df_left <- eir_df %>%
     filter(playSide == "left")
@@ -651,6 +651,43 @@ eir_df_right %>%
     ))
 ```
 
+## Top 10 EIR all
+```{r}
+eir_df_all <- eir_df
+  
+eir_df_all <- eir_df_all[order(-eir_df_all$meanEIR), ]
+eir_df_all <- eir_df_all[order(-eir_df_all$freqEIR), ]
+
+# Make pretty column names
+names(eir_df_all) <- c("Team", "Name", "Playside", "Num. Plays",
+                   "Num. Plays for Player", "prop", "Avg Time",
+                   "Avg EIR", "Avg EPA", "Setting Freq", "Weighted EIR", "Percentile")
+
+drops <- c("Playside")
+eir_df_all <- eir_df_all[ , !(names(eir_df_all) %in% drops)]
+
+eir_df_all %>%
+  head(10) %>%
+  select('Team', 'Name', 'Setting Freq', 'Avg Time', 'Avg EIR', 'Avg EPA', "Percentile") %>%
+  gt() %>%
+  fmt_number(
+    columns = c("Avg EPA"), 
+    decimals = 2
+  ) %>% 
+  tab_header(
+    title = "Top 10 Edge Setters"
+  ) %>% data_color(
+    columns = c("Percentile"),
+    fn = scales::col_numeric(
+      palette = c("lightcyan", "darkcyan"),
+      domain = NULL
+    )) %>% data_color(
+    columns = c("Avg EPA"),
+    fn = scales::col_numeric(
+      palette = c("darkcyan", "white", "firebrick4"),
+      domain = NULL
+    ))
+```
 
 
 
